@@ -137,7 +137,7 @@ class ExternalAppendOnlyMap[K, V, C](
    *
    * The shuffle memory usage of the first trackMemoryThreshold entries is not tracked.
    */
-  def insertAll(entries: Iterator[Product2[K, V]]): Unit = {
+  def insertAll(entries: Iterator[Product2[K, V]], timeout: Option[Int] = None): Unit = {
     if (currentMap == null) {
       throw new IllegalStateException(
         "Cannot insert new elements into a map after calling iterator")
@@ -149,17 +149,34 @@ class ExternalAppendOnlyMap[K, V, C](
       if (hadVal) mergeValue(oldVal, curEntry._2) else createCombiner(curEntry._2)
     }
 
-    while (entries.hasNext) {
-      curEntry = entries.next()
-      val estimatedSize = currentMap.estimateSize()
-      if (estimatedSize > _peakMemoryUsedBytes) {
-        _peakMemoryUsedBytes = estimatedSize
-      }
-      if (maybeSpill(currentMap, estimatedSize)) {
-        currentMap = new SizeTrackingAppendOnlyMap[K, C]
-      }
-      currentMap.changeValue(curEntry._1, update)
-      addElementsRead()
+    timeout match {
+      case None =>
+        while (entries.hasNext) {
+          curEntry = entries.next()
+          val estimatedSize = currentMap.estimateSize()
+          if (estimatedSize > _peakMemoryUsedBytes) {
+            _peakMemoryUsedBytes = estimatedSize
+          }
+          if (maybeSpill(currentMap, estimatedSize)) {
+            currentMap = new SizeTrackingAppendOnlyMap[K, C]
+          }
+          currentMap.changeValue(curEntry._1, update)
+          addElementsRead()
+        }
+      case Some(time) =>
+        val startTime = System.currentTimeMillis()
+        while (entries.hasNext && System.currentTimeMillis() - startTime <= time * 1000) {
+          curEntry = entries.next()
+          val estimatedSize = currentMap.estimateSize()
+          if (estimatedSize > _peakMemoryUsedBytes) {
+            _peakMemoryUsedBytes = estimatedSize
+          }
+          if (maybeSpill(currentMap, estimatedSize)) {
+            currentMap = new SizeTrackingAppendOnlyMap[K, C]
+          }
+          currentMap.changeValue(curEntry._1, update)
+          addElementsRead()
+        }
     }
   }
 

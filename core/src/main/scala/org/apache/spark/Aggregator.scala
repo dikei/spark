@@ -32,7 +32,8 @@ import org.apache.spark.util.collection.ExternalAppendOnlyMap
 case class Aggregator[K, V, C] (
     createCombiner: V => C,
     mergeValue: (C, V) => C,
-    mergeCombiners: (C, C) => C) {
+    mergeCombiners: (C, C) => C,
+    timeout: Option[Int] = None) {
 
   @deprecated("use combineValuesByKey with TaskContext argument", "0.9.0")
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]): Iterator[(K, C)] =
@@ -42,7 +43,7 @@ case class Aggregator[K, V, C] (
       iter: Iterator[_ <: Product2[K, V]],
       context: TaskContext): Iterator[(K, C)] = {
     val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    combiners.insertAll(iter)
+    combiners.insertAll(iter, timeout)
     updateMetrics(context, combiners)
     combiners.iterator
   }
@@ -55,7 +56,7 @@ case class Aggregator[K, V, C] (
       iter: Iterator[_ <: Product2[K, C]],
       context: TaskContext): Iterator[(K, C)] = {
     val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
-    combiners.insertAll(iter)
+    combiners.insertAll(iter, timeout)
     updateMetrics(context, combiners)
     combiners.iterator
   }

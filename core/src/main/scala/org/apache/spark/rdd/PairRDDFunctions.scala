@@ -59,6 +59,79 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 {
 
   /**
+    * :: Experimental ::
+    *
+    * Act like combineByKeyWithClassTag, but return 2 RDD.
+    * The partial RDD is the immediate result after timeout
+    * The full RDD is the final result regardless of timeout
+    *
+    * @param createCombiner
+    * @param mergeValue
+    * @param mergeCombiners
+    * @param partitioner
+    * @param mapSideCombine
+    * @param serializer
+    * @param timeout
+    * @param ct
+    * @tparam C
+    * @return
+    */
+  def combineByKeyWithTimeout[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      partitioner: Partitioner,
+      mapSideCombine: Boolean = true,
+      serializer: Serializer = null,
+      timeout: Int = 5)(implicit ct: ClassTag[C]) : (RDD[(K, C)], RDD[(K, C)]) = self.withScope {
+    require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
+    if (keyClass.isArray) {
+      if (mapSideCombine) {
+        throw new SparkException("Cannot use map-side combining with array keys.")
+      }
+      if (partitioner.isInstanceOf[HashPartitioner]) {
+        throw new SparkException("Default partitioner cannot partition array keys.")
+      }
+    }
+    val aggregator = new Aggregator[K, V, C](
+      self.context.clean(createCombiner),
+      self.context.clean(mergeValue),
+      self.context.clean(mergeCombiners))
+
+    val full = if (self.partitioner == Some(partitioner)) {
+      self.mapPartitions(iter => {
+        val context = TaskContext.get()
+        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
+      }, preservesPartitioning = true)
+    } else {
+      new ShuffledRDD[K, V, C](self, partitioner)
+        .setSerializer(serializer)
+        .setAggregator(aggregator)
+        .setMapSideCombine(mapSideCombine)
+    }
+
+    val aggregatorWithTimeout = new Aggregator[K, V, C](
+      self.context.clean(createCombiner),
+      self.context.clean(mergeValue),
+      self.context.clean(mergeCombiners),
+      timeout = Some(5)
+    )
+
+    val partial = if (self.partitioner == Some(partitioner)) {
+      self.mapPartitions(iter => {
+        val context = TaskContext.get()
+        new InterruptibleIterator(context, aggregatorWithTimeout.combineValuesByKey(iter, context))
+      }, preservesPartitioning = true)
+    } else {
+      new ShuffledRDD[K, V, C](self, partitioner)
+        .setSerializer(serializer)
+        .setAggregator(aggregatorWithTimeout)
+        .setMapSideCombine(mapSideCombine)
+    }
+    (partial, full)
+  }
+
+  /**
    * :: Experimental ::
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
