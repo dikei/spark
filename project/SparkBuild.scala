@@ -60,6 +60,8 @@ object BuildCommons {
 
   val javacJVMVersion = settingKey[String]("source and target JVM version for javac")
   val scalacJVMVersion = settingKey[String]("source and target JVM version for scalac")
+  
+  val thesis = ProjectRef(buildLocation, "thesis")
 }
 
 object SparkBuild extends PomBuild {
@@ -220,7 +222,7 @@ object SparkBuild extends PomBuild {
 
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
+  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools, thesis))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
       ExcludedDependencies.settings ++ Revolver.settings))
 
