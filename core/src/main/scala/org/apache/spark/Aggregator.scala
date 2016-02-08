@@ -33,7 +33,8 @@ case class Aggregator[K, V, C] (
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
-    timeout: Option[Int] = None) {
+    timeout: Option[Int] = None,
+    interval: Option[Int] = None) {
 
   @deprecated("use combineValuesByKey with TaskContext argument", "0.9.0")
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]): Iterator[(K, C)] =
@@ -42,10 +43,15 @@ case class Aggregator[K, V, C] (
   def combineValuesByKey(
       iter: Iterator[_ <: Product2[K, V]],
       context: TaskContext): Iterator[(K, C)] = {
-    val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    combiners.insertAll(iter, timeout)
-    updateMetrics(context, combiners)
-    combiners.iterator
+    interval match {
+      case None =>
+        val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+        combiners.insertAll(iter, timeout)
+        updateMetrics(context, combiners)
+        combiners.iterator
+      case Some(time) =>
+        new AggregateValueByIntervalInterator[K, V, C](iter, context, createCombiner, mergeValue, mergeCombiners, time)
+    }
   }
 
   @deprecated("use combineCombinersByKey with TaskContext argument", "0.9.0")
@@ -55,13 +61,89 @@ case class Aggregator[K, V, C] (
   def combineCombinersByKey(
       iter: Iterator[_ <: Product2[K, C]],
       context: TaskContext): Iterator[(K, C)] = {
-    val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
-    combiners.insertAll(iter, timeout)
-    updateMetrics(context, combiners)
-    combiners.iterator
+    interval match {
+      case None =>
+        val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+        combiners.insertAll(iter, timeout)
+        updateMetrics(context, combiners)
+        combiners.iterator
+      case Some(time) =>
+        new AggregateCombinerByIntervalIterator[K, C](iter, context, mergeCombiners, time)
+    }
   }
 
   /** Update task metrics after populating the external map. */
+  private def updateMetrics(context: TaskContext, map: ExternalAppendOnlyMap[_, _, _]): Unit = {
+    Option(context).foreach { c =>
+      c.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
+      c.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
+      c.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
+    }
+  }
+}
+
+private class AggregateValueByIntervalInterator[K, V, C](
+    iter: Iterator[_ <: Product2[K, V]],
+    context: TaskContext,
+    createCombiner: V => C,
+    mergeValue: (C, V) => C,
+    mergeCombiners: (C, C) => C,
+    interval: Int) extends Iterator[(K, C)] with Logging {
+
+  var currentIter: Iterator[(K, C)] = null
+
+  override def hasNext: Boolean = {
+    iter.hasNext || (currentIter != null && currentIter.hasNext)
+  }
+
+  override def next(): (K, C) = {
+    // Load the map for the next interval
+    if (iter.hasNext && (currentIter == null || !currentIter.hasNext)) {
+      val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      combiners.insertAll(iter, Some(interval))
+      updateMetrics(context, combiners)
+      combiners.iterator
+      currentIter = combiners.iterator
+    }
+
+    currentIter.next()
+  }
+
+  private def updateMetrics(context: TaskContext, map: ExternalAppendOnlyMap[_, _, _]): Unit = {
+    Option(context).foreach { c =>
+      c.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
+      c.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
+      c.internalMetricsToAccumulators(
+        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
+    }
+  }
+}
+
+private class AggregateCombinerByIntervalIterator[K, C](
+   iter: Iterator[_ <: Product2[K, C]],
+   context: TaskContext,
+   mergeCombiners: (C, C) => C,
+   interval: Int) extends Iterator[(K, C)] with Logging {
+
+  var currentIter: Iterator[(K, C)] = null
+
+  override def hasNext: Boolean = {
+    iter.hasNext || (currentIter != null && currentIter.hasNext)
+  }
+
+  override def next(): (K, C) = {
+    // Load the map for the next interval
+    if (iter.hasNext && (currentIter == null || !currentIter.hasNext)) {
+      val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+      combiners.insertAll(iter, timeout = Some(interval))
+      updateMetrics(context, combiners)
+      currentIter = combiners.iterator
+    }
+
+    currentIter.next()
+  }
+
   private def updateMetrics(context: TaskContext, map: ExternalAppendOnlyMap[_, _, _]): Unit = {
     Option(context).foreach { c =>
       c.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
