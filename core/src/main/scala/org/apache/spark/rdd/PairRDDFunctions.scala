@@ -114,7 +114,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       self.context.clean(createCombiner),
       self.context.clean(mergeValue),
       self.context.clean(mergeCombiners),
-      timeout = Some(5)
+      timeout = Some(timeout)
     )
 
     val partial = if (self.partitioner == Some(partitioner)) {
