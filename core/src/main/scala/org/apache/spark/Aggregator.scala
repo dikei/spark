@@ -91,6 +91,7 @@ private class AggregateValueByIntervalInterator[K, V, C](
     mergeCombiners: (C, C) => C,
     interval: Int) extends Iterator[(K, C)] with Logging {
 
+  var accumulator = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
   var currentIter: Iterator[(K, C)] = null
 
   override def hasNext: Boolean = {
@@ -103,11 +104,24 @@ private class AggregateValueByIntervalInterator[K, V, C](
       val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
       combiners.insertAll(iter, Some(interval))
       updateMetrics(context, combiners)
-      combiners.iterator
-      currentIter = combiners.iterator
+
+      // Merge into accumulator before returning
+      accumulator.insertAll(combiners.iterator)
+      currentIter = accumulator.iterator
+
+      // Create new accumulator if we can still read from the iterator
+      if (iter.hasNext) {
+        accumulator = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+      }
+    }
+    val (retKey, retCom) = currentIter.next
+
+    // Store the accumulated value if needed
+    if (iter.hasNext) {
+      accumulator.insert(retKey, retCom)
     }
 
-    currentIter.next()
+    (retKey, retCom)
   }
 
   private def updateMetrics(context: TaskContext, map: ExternalAppendOnlyMap[_, _, _]): Unit = {
@@ -126,6 +140,7 @@ private class AggregateCombinerByIntervalIterator[K, C](
    mergeCombiners: (C, C) => C,
    interval: Int) extends Iterator[(K, C)] with Logging {
 
+  var accumulator = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
   var currentIter: Iterator[(K, C)] = null
 
   override def hasNext: Boolean = {
@@ -138,10 +153,23 @@ private class AggregateCombinerByIntervalIterator[K, C](
       val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
       combiners.insertAll(iter, timeout = Some(interval))
       updateMetrics(context, combiners)
-      currentIter = combiners.iterator
+      // Merge with accumulator
+      accumulator.insertAll(combiners.iterator)
+      currentIter = accumulator.iterator
+
+      // Create new accumulator if we can still read from the iterator
+      if (iter.hasNext) {
+        accumulator = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+      }
+    }
+    val (retKey, retCom) = currentIter.next
+
+    // Store the accumulated value if needed
+    if (iter.hasNext) {
+      accumulator.insert(retKey, retCom)
     }
 
-    currentIter.next()
+    (retKey, retCom)
   }
 
   private def updateMetrics(context: TaskContext, map: ExternalAppendOnlyMap[_, _, _]): Unit = {

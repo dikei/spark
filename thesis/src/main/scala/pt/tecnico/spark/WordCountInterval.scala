@@ -33,8 +33,12 @@ object WordCountInterval {
         interval = 60
       )
 
+//      val words = ret.filter(t => t._2 > 20000).take(50)
+//      println("50 words with more than 20000 occurrences")
+//      words.foreach(println)
+
       // Combine the interval and output the final value
-      ret.reduceByKey((a, b) => a + b)
+      ret.reduceByKey((a, b) => if (a < b ) b else a)
         .saveAsTextFile(outputFile)
   }
 }
