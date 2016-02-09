@@ -22,7 +22,7 @@ object WordCountTimeout {
       a + b
     }
     // Do the word count and save output
-    val (partial, _) = sc.textFile(inputFile)
+    val partial = sc.textFile(inputFile)
       .flatMap(line => line.split("\\s+"))
       .map(word => (word, 1))
       .combineByKeyWithTimeout[Int](

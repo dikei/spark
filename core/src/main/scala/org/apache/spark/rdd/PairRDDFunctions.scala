@@ -83,7 +83,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
       serializer: Serializer = null,
-      timeout: Int = 5)(implicit ct: ClassTag[C]) : (RDD[(K, C)], RDD[(K, C)]) = self.withScope {
+      timeout: Int = 5)(implicit ct: ClassTag[C]) : RDD[(K, C)] = self.withScope {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (keyClass.isArray) {
       if (mapSideCombine) {
@@ -93,23 +93,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         throw new SparkException("Default partitioner cannot partition array keys.")
       }
     }
-    val aggregator = new Aggregator[K, V, C](
-      self.context.clean(createCombiner),
-      self.context.clean(mergeValue),
-      self.context.clean(mergeCombiners))
-
-    val full = if (self.partitioner == Some(partitioner)) {
-      self.mapPartitions(iter => {
-        val context = TaskContext.get()
-        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
-      }, preservesPartitioning = true)
-    } else {
-      new ShuffledRDD[K, V, C](self, partitioner)
-        .setSerializer(serializer)
-        .setAggregator(aggregator)
-        .setMapSideCombine(mapSideCombine)
-    }
-
     val aggregatorWithTimeout = new Aggregator[K, V, C](
       self.context.clean(createCombiner),
       self.context.clean(mergeValue),
@@ -117,7 +100,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       timeout = Some(timeout)
     )
 
-    val partial = if (self.partitioner == Some(partitioner)) {
+    if (self.partitioner == Some(partitioner)) {
       self.mapPartitions(iter => {
         val context = TaskContext.get()
         new InterruptibleIterator(context, aggregatorWithTimeout.combineValuesByKey(iter, context))
@@ -128,7 +111,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         .setAggregator(aggregatorWithTimeout)
         .setMapSideCombine(mapSideCombine)
     }
-    (partial, full)
   }
 
   def combineByKeyWithInterval[C](
