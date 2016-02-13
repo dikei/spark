@@ -87,4 +87,5 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+  def freeSlotAvailable(pendingMapTasks: Int): Boolean = false
 }

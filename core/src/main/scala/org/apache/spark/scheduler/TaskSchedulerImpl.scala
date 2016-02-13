@@ -590,6 +590,9 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  override def freeSlotAvailable(pendingMapTasks: Int): Boolean = {
+    backend.freeSlotAvailable(pendingMapTasks)
+  }
 }
 
 
