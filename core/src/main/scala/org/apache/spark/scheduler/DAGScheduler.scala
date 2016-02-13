@@ -184,6 +184,8 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
+  private val removeStageBarrier = sc.getConf.getBoolean("spark.scheduler.removeStageBarrier", false)
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -1223,6 +1225,14 @@ class DAGScheduler(
               }
 
               // Note: newly runnable stages will be submitted below when we submit waiting stages
+            } else if (removeStageBarrier) {
+              // Register the map output so we have something to read from
+              mapOutputTracker.registerMapOutputs(
+                shuffleStage.shuffleDep.shuffleId,
+                shuffleStage.outputLocInMapOutputTrackerFormat(),
+                changeEpoch = false)
+              // Try starting the next stage
+              tryStartNextStage()
             }
         }
 
@@ -1297,6 +1307,33 @@ class DAGScheduler(
         // will abort the job.
     }
     submitWaitingStages()
+  }
+
+  private[scheduler] def tryStartNextStage(): Unit = {
+    val pendingMapTasks = runningStages.map { stage =>
+      stage.pendingPartitions.size
+    }.sum
+
+    if (taskScheduler.freeSlotAvailable(pendingMapTasks)) {
+      log.info("Free slot available. Try starting next stage")
+      // Search the waiting stages for stage that all missing parents are
+      // not waiting or failed
+      val candidate = waitingStages.find { stage =>
+        val parents = getMissingParentStages(stage)
+        parents.forall( p => !waitingStages.contains(p) && !failedStages.contains(p))
+      }
+
+      candidate match {
+        case Some(stage) =>
+          log.info("Starting stage: {}", stage.id)
+
+          //Remove waiting stage and submit all its task
+          waitingStages -= stage
+          submitMissingTasks(stage, activeJobForStage(stage).get)
+        case None =>
+          log.info("No stage can be started")
+      }
+    }
   }
 
   /**
