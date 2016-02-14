@@ -179,10 +179,16 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    *
    * (It would be nice to remove this restriction in the future.)
    */
-  private def getStatuses(shuffleId: Int): Array[MapStatus] = {
+  def getStatuses(shuffleId: Int): Array[MapStatus] = {
+    val removeStageBarrier = conf.getBoolean("spark.scheduler.removeStageBarrier", false)
+
     val statuses = mapStatuses.get(shuffleId).orNull
-    if (statuses == null) {
-      logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
+    if (statuses == null || (removeStageBarrier && statuses.contains(null))) {
+      if (statuses != null) {
+        log.info("Map outputs are incomplete for {}, re-fetching", shuffleId)
+      } else {
+        logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
+      }
       val startTime = System.currentTimeMillis
       var fetchedStatuses: Array[MapStatus] = null
       fetching.synchronized {
@@ -198,13 +204,13 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         // Either while we waited the fetch happened successfully, or
         // someone fetched it in between the get and the fetching.synchronized.
         fetchedStatuses = mapStatuses.get(shuffleId).orNull
-        if (fetchedStatuses == null) {
+        if (fetchedStatuses == null || (removeStageBarrier && fetchedStatuses.contains(null))) {
           // We have to do the fetch, get others to wait for us.
           fetching += shuffleId
         }
       }
 
-      if (fetchedStatuses == null) {
+      if (fetchedStatuses == null || (removeStageBarrier && fetchedStatuses.contains(null))) {
         // We won the race to fetch the statuses; do so
         logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
         // This try-finally prevents hangs due to timeouts:

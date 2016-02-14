@@ -19,7 +19,7 @@ package org.apache.spark.shuffle
 
 import org.apache.spark._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
+import org.apache.spark.storage.{PartialShuffleBlockFetcherIterator, BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -40,13 +40,28 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val blockFetcherItr = new ShuffleBlockFetcherIterator(
-      context,
-      blockManager.shuffleClient,
-      blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
-      // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
-      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024)
+    val removeStageBarrier = SparkEnv.get.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
+    // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
+    val maxBytesInFlight = SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
+
+    val blockFetcherItr = if (!removeStageBarrier) {
+      new ShuffleBlockFetcherIterator(
+        context,
+        blockManager.shuffleClient,
+        blockManager,
+        mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
+        maxBytesInFlight)
+    } else {
+      new PartialShuffleBlockFetcherIterator(
+        context,
+        blockManager.shuffleClient,
+        blockManager,
+        mapOutputTracker,
+        handle.shuffleId,
+        startPartition,
+        endPartition,
+        maxBytesInFlight)
+    }
 
     // Wrap the streams for compression based on configuration
     val wrappedStreams = blockFetcherItr.map { case (blockId, inputStream) =>
