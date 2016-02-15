@@ -13,7 +13,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 /**
   * A shuffle block fetcher that works even when the map output is not completed.
-  * This is done by wrapping around the SHuffleBlockFetcher and refresh it as needed
+  * This is done by wrapping around the ShuffleBlockFetcher and refresh it as needed
   */
 class PartialShuffleBlockFetcherIterator(
     context: TaskContext,
@@ -47,7 +47,6 @@ class PartialShuffleBlockFetcherIterator(
   }
 
   override def next(): (BlockId, InputStream) = {
-    log.info("Next")
     blockFetcherIter.next()
   }
 
@@ -67,8 +66,8 @@ class PartialShuffleBlockFetcherIterator(
     var newBlocksAvailable = statusWithIndex.exists { case (s, i) => s != null && !readyBlocks.contains(i) }
     while (!newBlocksAvailable) {
       // Wait until new block is available
-//      log.info("Waiting 1s for new block to be available")
-//      log.info("Status with index: {}", statusWithIndex)
+      log.info("Waiting 1s for new block to be available")
+      log.info("Status with index: {}", statusWithIndex)
       Thread.sleep(1000)
       statusWithIndex = statuses.zipWithIndex
       newBlocksAvailable = statusWithIndex.exists { case (s, i) => s != null && !readyBlocks.contains(i) }
@@ -84,6 +83,8 @@ class PartialShuffleBlockFetcherIterator(
         readyBlocks += mapId
       }
     }
+
+    log.info("Ready block: {}", readyBlocks)
 
     if (readyBlocks.size == statuses.length) {
       finished = true

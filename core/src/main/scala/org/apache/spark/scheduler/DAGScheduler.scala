@@ -1313,7 +1313,7 @@ class DAGScheduler(
     val pendingMapTasks = runningStages.map { stage =>
       stage.pendingPartitions.size
     }.sum
-
+    log.info("Pending map tasks: {}", pendingMapTasks)
     if (taskScheduler.freeSlotAvailable(pendingMapTasks)) {
       log.info("Free slot available. Try starting next stage")
       // Search the waiting stages for stage that all missing parents are

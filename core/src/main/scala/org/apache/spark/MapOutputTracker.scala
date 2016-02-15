@@ -100,6 +100,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /** Remembers which map output locations are currently being fetched on an executor. */
   private val fetching = new HashSet[Int]
+  /** Remembers last time we do the fetch to prevent excessive fetching **/
+  private val lastFetchs = new HashMap[Int, Long]
 
   /**
    * Send a message to the trackerEndpoint and get its result within a default timeout, or
@@ -191,7 +193,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
       val startTime = System.currentTimeMillis
       var fetchedStatuses: Array[MapStatus] = null
-      fetching.synchronized {
+      val shouldFetch = fetching.synchronized {
         // Someone else is fetching it; wait for them to be done
         while (fetching.contains(shuffleId)) {
           try {
@@ -201,16 +203,23 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           }
         }
 
+        val currentTime = System.currentTimeMillis
+        val lastFetch = lastFetchs.getOrElse(shuffleId, 0L)
         // Either while we waited the fetch happened successfully, or
         // someone fetched it in between the get and the fetching.synchronized.
         fetchedStatuses = mapStatuses.get(shuffleId).orNull
-        if (fetchedStatuses == null || (removeStageBarrier && fetchedStatuses.contains(null))) {
+        if (fetchedStatuses == null ||
+          (removeStageBarrier && fetchedStatuses.contains(null) && currentTime - lastFetch > 1000)) {
           // We have to do the fetch, get others to wait for us.
           fetching += shuffleId
+          lastFetchs += shuffleId -> currentTime
+          true
+        } else {
+          false
         }
       }
 
-      if (fetchedStatuses == null || (removeStageBarrier && fetchedStatuses.contains(null))) {
+      if (shouldFetch) {
         // We won the race to fetch the statuses; do so
         logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
         // This try-finally prevents hangs due to timeouts:
