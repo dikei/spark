@@ -1226,13 +1226,8 @@ class DAGScheduler(
 
               // Note: newly runnable stages will be submitted below when we submit waiting stages
             } else if (removeStageBarrier) {
-              // Register the map output so we have something to read from
-              mapOutputTracker.registerMapOutputs(
-                shuffleStage.shuffleDep.shuffleId,
-                shuffleStage.outputLocInMapOutputTrackerFormat(),
-                changeEpoch = false)
               // Try starting the next stage
-              tryStartNextStage()
+              tryStartNextStage(shuffleStage)
             }
         }
 
@@ -1309,7 +1304,7 @@ class DAGScheduler(
     submitWaitingStages()
   }
 
-  private[scheduler] def tryStartNextStage(): Unit = {
+  private[scheduler] def tryStartNextStage(shuffleStage: ShuffleMapStage): Unit = {
     val pendingMapTasks = runningStages.map { stage =>
       stage.pendingPartitions.size
     }.sum
@@ -1326,6 +1321,12 @@ class DAGScheduler(
       candidate match {
         case Some(stage) =>
           log.info("Starting stage: {}", stage.id)
+
+          // Register the map output immediately so we have something to read from
+          mapOutputTracker.registerMapOutputs(
+            shuffleStage.shuffleDep.shuffleId,
+            shuffleStage.outputLocInMapOutputTrackerFormat(),
+            changeEpoch = false)
 
           //Remove waiting stage and submit all its task
           waitingStages -= stage
