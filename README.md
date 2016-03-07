@@ -1,3 +1,32 @@
+# Spark modification for MS Thesis 
+
+* Module core/: 
+	* Update to make Spark run barrier-less. 
+	* Add some experimental API for partial computation
+	* Check git log for details.
+	
+* Module thesis/: Contains various test programs using the original 
+and modified Spark API
+
+* To test the code:
+
+	* Build Spark using sbt
+
+			sbt assembly
+
+	* Build the thesis module
+
+			sbt thesis/assembly
+
+	* Start Spark
+
+			sbin/start-all.sh
+
+	* Run the shell scripts inside: 
+
+			thesis/bin
+
+
 # Apache Spark
 
 Spark is a fast and general cluster computing system for Big Data. It provides
