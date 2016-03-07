@@ -13,8 +13,9 @@ object TriangleCount {
     val input = args(0)
     val output = args(1)
 
-    val conf = new SparkConf().setAppName("TriangleCount")
+    val conf = new SparkConf().setAppName("TriangleCount With Barrier")
     conf.set("spark.hadoop.validateOutputSpecs", "false")
+//    conf.set("spark.scheduler.removeStageBarrier", "true")
 
     val sc = new SparkContext(conf)
     val graph = GraphLoader.edgeListFile(sc, input, canonicalOrientation = true)

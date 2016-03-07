@@ -23,6 +23,7 @@ object MatrixFactorApp {
 
     val conf = new SparkConf().setAppName("Matrix Factorization")
     conf.set("spark.hadoop.validateOutputSpecs", "false")
+//    conf.set("spark.scheduler.removeStageBarrier", "true")
 
     val sc = new SparkContext(conf)
 

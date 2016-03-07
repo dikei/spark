@@ -19,8 +19,9 @@ object PageRank {
     val output = args(1)
     val iteration = if (args.length > 2) args(2).toInt else 10
 
-    val conf = new SparkConf().setAppName("PageRankGraphx")
+    val conf = new SparkConf().setAppName("PageRankGraph")
     conf.set("spark.hadoop.validateOutputSpecs", "false")
+//    conf.set("spark.scheduler.removeStageBarrier", "true")
 
     val sc = new SparkContext(conf)
 

@@ -10,6 +10,7 @@ object WordCount {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("WordCount")
     conf.set("spark.hadoop.validateOutputSpecs", "false")
+//    conf.set("spark.scheduler.removeStageBarrier", "true")
 
     val sc = new SparkContext(conf)
 
@@ -19,7 +20,6 @@ object WordCount {
     val createCombiner = (v: Int) => v
     val mergeValue = (a: Int, b: Int) => a + b
     val mergeCombiners = (a: Int, b: Int) => {
-      Thread.sleep(1)
       a + b
     }
     val out = sc.textFile(inputFile)

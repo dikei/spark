@@ -45,7 +45,11 @@ object PageRankSimple {
     val input = args(0)
     val output = args(1)
     val iters = if (args.length > 2) args(2).toInt else 10
+
     val sparkConf = new SparkConf().setAppName("PageRankSimple")
+    sparkConf.set("spark.hadoop.validateOutputSpecs", "false")
+//    sparkConf.set("spark.scheduler.removeStageBarrier", "true")
+
     val ctx = new SparkContext(sparkConf)
     val lines = ctx.textFile(input, 1)
     val links = lines.map{ s =>
