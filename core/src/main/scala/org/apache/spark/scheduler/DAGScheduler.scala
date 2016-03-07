@@ -22,7 +22,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.Map
+import scala.collection.{mutable, Map}
 import scala.collection.mutable.{HashMap, HashSet, Stack}
 import scala.concurrent.duration._
 import scala.language.existentials
@@ -185,6 +185,7 @@ class DAGScheduler(
   taskScheduler.setDAGScheduler(this)
 
   private val removeStageBarrier = sc.getConf.getBoolean("spark.scheduler.removeStageBarrier", false)
+  private val dependantStagesStarted = new mutable.HashSet[Stage]()
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -1187,6 +1188,14 @@ class DAGScheduler(
               shuffleStage.addOutputLoc(smt.partitionId, status)
             }
 
+            // If a dependant stage is started, commit the data of the parent stage
+            if (removeStageBarrier && dependantStagesStarted.contains(stage)) {
+              mapOutputTracker.registerMapOutputs(
+                shuffleStage.shuffleDep.shuffleId,
+                shuffleStage.outputLocInMapOutputTrackerFormat(),
+                changeEpoch = false)
+            }
+
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
               markStageAsFinished(shuffleStage)
               logInfo("looking for newly runnable stages")
@@ -1223,6 +1232,8 @@ class DAGScheduler(
                   }
                 }
               }
+
+              dependantStagesStarted -= stage
 
               // Note: newly runnable stages will be submitted below when we submit waiting stages
             } else if (removeStageBarrier) {
@@ -1327,6 +1338,8 @@ class DAGScheduler(
             shuffleStage.shuffleDep.shuffleId,
             shuffleStage.outputLocInMapOutputTrackerFormat(),
             changeEpoch = false)
+
+          dependantStagesStarted ++= getMissingParentStages(stage)
 
           //Remove waiting stage and submit all its task
           waitingStages -= stage
