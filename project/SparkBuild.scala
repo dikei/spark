@@ -60,8 +60,9 @@ object BuildCommons {
 
   val javacJVMVersion = settingKey[String]("source and target JVM version for javac")
   val scalacJVMVersion = settingKey[String]("source and target JVM version for scalac")
-  
+
   val thesis = ProjectRef(buildLocation, "thesis")
+
 }
 
 object SparkBuild extends PomBuild {
@@ -233,6 +234,9 @@ object SparkBuild extends PomBuild {
     networkCommon, networkShuffle, networkYarn, unsafe, testTags).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
+
+  /* Thesis settings */
+  enable(Thesis.settings)(thesis)
 
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
@@ -686,6 +690,22 @@ object TestSettings {
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
     )
+  )
+}
+
+object Thesis {
+	import sbtassembly.AssemblyUtils._
+	import sbtassembly.Plugin._
+	import AssemblyKeys._
+
+	val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
+
+  lazy val settings = assemblySettings ++ Seq(
+    test in assembly := {},
+    jarName in assembly := "thesis_2.10-1.6.0.jar",
+    excludedJars in assembly <<= (fullClasspath in assembly) map { cp => 
+      cp filter {_.data.getName != "super-csv-2.4.0.jar"}
+    }
   )
 
 }
