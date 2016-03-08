@@ -4,7 +4,7 @@ import java.io.{File, FileWriter}
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.supercsv.cellprocessor.ift.CellProcessor
@@ -23,13 +23,17 @@ class StageRuntimeReportListener(statisticDir: String) extends SparkListener wit
   private val now = Calendar.getInstance()
   private val dateFormat = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss")
   private val timeStamp = dateFormat.format(now.getTime)
-  private val fileName = s"PageRankGraph-$timeStamp.csv"
+  private val appName = SparkEnv.get.conf.get("spark.app.name")
+  private val fileName = s"$appName-$timeStamp.csv"
 
   private val headers = Array (
-    "StageId", "Name", "TaskCount", "Average", "Fastest", "Slowest", "StandardDeviation"
+    "StageId", "Name", "TaskCount", "TotalTaskRuntime", "StageRuntime",
+    "Average", "Fastest", "Slowest", "StandardDeviation",
+    "Percent5", "Percent25", "Median", "Percent75", "Percent95"
   )
 
   private val csvWriter = new CsvBeanWriter(new FileWriter(new File(statisticDir, fileName)), CsvPreference.STANDARD_PREFERENCE)
+  csvWriter.writeHeader(headers:_*)
 
   /**
     * Called when a stage is submitted
@@ -55,30 +59,47 @@ class StageRuntimeReportListener(statisticDir: String) extends SparkListener wit
     val runtime = info.completionTime.get - info.submissionTime.get
     log.info("Stage runtime: {} ms", runtime)
 
+    val stageTaskInfoMetrics = taskInfoMetrics.get(info.stageId).get.toArray
+    val durations = stageTaskInfoMetrics.map { case (taskInfo, taskMetric) =>
+      taskInfo.duration
+    }
+
     var totalDuration = 0L
     var min = Long.MaxValue
     var max = 0L
-    taskInfoMetrics.get(info.stageId).get.foreach { case (taskInfo, taskMetric) =>
-      totalDuration += taskInfo.duration
-      if (taskInfo.duration < min) {
-        min = taskInfo.duration
+    durations.foreach { duration =>
+      totalDuration += duration
+      if (duration < min) {
+        min = duration
       }
-      if (taskInfo.duration > max) {
-        max = taskInfo.duration
+      if (duration > max) {
+        max = duration
       }
     }
 
     val mean = totalDuration / info.numTasks
-    val variance = taskInfoMetrics.get(info.stageId).get.map { case (taskInfo, taskMetric) =>
-      val tmp = taskInfo.duration - mean
+    val variance = durations.map { duration =>
+      val tmp = duration - mean
       tmp * tmp
     }.sum / info.numTasks
+
+    val sortedDurations = durations.sorted
+    val percent5 = sortedDurations((sortedDurations.length * 0.05).toInt)
+    val percent25 = sortedDurations((sortedDurations.length * 0.25).toInt)
+    val median = sortedDurations((sortedDurations.length * 0.5).toInt)
+    val percent75 = sortedDurations((sortedDurations.length * 0.75).toInt)
+    val percent95 = sortedDurations((sortedDurations.length * 0.95).toInt)
 
     log.info("Total task time: {} ms", totalDuration)
     log.info("Average task runtime: {} ms", mean)
     log.info("Fastest task: {} ms", min)
     log.info("Slowest task: {} ms", max)
     log.info("Standard deviation: {} ms", Math.sqrt(variance))
+    log.info("5th percentile: {} ms", percent5)
+    log.info("25th percentile: {} ms", percent25)
+    log.info("Median: {} ms", median)
+    log.info("75th percentile: {} ms", percent75)
+    log.info("95th percentile: {} ms", percent95)
 
     val taskRuntimeStats = new TaskRuntimeStatistic
     taskRuntimeStats.setName(info.name)
@@ -87,19 +108,16 @@ class StageRuntimeReportListener(statisticDir: String) extends SparkListener wit
     taskRuntimeStats.setAverage(mean)
     taskRuntimeStats.setFastest(min)
     taskRuntimeStats.setSlowest(max)
-    taskRuntimeStats.setStandardDeviation(Math.sqrt(variance).toLong)
+    taskRuntimeStats.setStandardDeviation(math.sqrt(variance).toLong)
+    taskRuntimeStats.setPercent25(percent25)
+    taskRuntimeStats.setPercent75(percent75)
+    taskRuntimeStats.setMedian(median)
+    taskRuntimeStats.setPercent5(percent5)
+    taskRuntimeStats.setPercent95(percent95)
+    taskRuntimeStats.setTotalTaskRuntime(totalDuration)
+    taskRuntimeStats.setStageRuntime(runtime)
 
-    val processor : Array[CellProcessor] = Array (
-      new org.supercsv.cellprocessor.constraint.NotNull(),
-      new org.supercsv.cellprocessor.constraint.NotNull(),
-      new org.supercsv.cellprocessor.constraint.NotNull(),
-      new org.supercsv.cellprocessor.constraint.NotNull(),
-      new org.supercsv.cellprocessor.constraint.NotNull(),
-      new org.supercsv.cellprocessor.constraint.NotNull(),
-      new org.supercsv.cellprocessor.constraint.NotNull()
-    )
-
-    csvWriter.write(taskRuntimeStats, headers, processor)
+    csvWriter.write(taskRuntimeStats, headers:_*)
     csvWriter.flush()
 
     // Clear out the buffer to save memory
@@ -115,14 +133,6 @@ class StageRuntimeReportListener(statisticDir: String) extends SparkListener wit
         buffer += ((taskEnd.taskInfo, taskEnd.taskMetrics))
       }
     }
-  }
-
-
-  /**
-    * Called when the application starts
-    */
-  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
-    csvWriter.writeHeader(headers:_*)
   }
 
   /**

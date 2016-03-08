@@ -11,6 +11,69 @@ public class TaskRuntimeStatistic {
     private Long standardDeviation;
     private String name;
     private Integer taskCount;
+    private Long percent5;
+    private Long percent25;
+    private Long median;
+    private Long percent75;
+    private Long percent95;
+    private Long totalTaskRuntime;
+    private Long stageRuntime;
+
+    public Long getTotalTaskRuntime() {
+        return totalTaskRuntime;
+    }
+
+    public void setTotalTaskRuntime(Long totalTaskRuntime) {
+        this.totalTaskRuntime = totalTaskRuntime;
+    }
+
+    public Long getStageRuntime() {
+        return stageRuntime;
+    }
+
+    public void setStageRuntime(Long stageRuntime) {
+        this.stageRuntime = stageRuntime;
+    }
+
+    public Long getPercent5() {
+        return percent5;
+    }
+
+    public void setPercent5(Long percent5) {
+        this.percent5 = percent5;
+    }
+
+    public Long getPercent95() {
+        return percent95;
+    }
+
+    public void setPercent95(Long percent95) {
+        this.percent95 = percent95;
+    }
+
+    public Long getPercent25() {
+        return percent25;
+    }
+
+    public void setPercent25(Long percent25) {
+        this.percent25 = percent25;
+    }
+
+    public Long getMedian() {
+        return median;
+    }
+
+    public void setMedian(Long median) {
+        this.median = median;
+    }
+
+    public Long getPercent75() {
+        return percent75;
+    }
+
+    public void setPercent75(Long percent75) {
+        this.percent75 = percent75;
+    }
 
     public Integer getTaskCount() {
         return taskCount;
