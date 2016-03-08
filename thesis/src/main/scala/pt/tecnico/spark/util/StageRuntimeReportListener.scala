@@ -1,20 +1,35 @@
 package pt.tecnico.spark.util
 
+import java.io.{File, FileWriter}
+import java.text.SimpleDateFormat
+import java.util.Calendar
+
 import org.apache.spark.Logging
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.supercsv.cellprocessor.ift.CellProcessor
-import org.supercsv.io.ICsvBeanWriter
+import org.supercsv.io.{CsvBeanWriter, ICsvBeanWriter}
+import org.supercsv.prefs.CsvPreference
 
 import scala.collection.mutable
 
 /**
   * Listener to calculate the stage runtime
   */
-class StageRuntimeReportListener(csvWriter: ICsvBeanWriter, headers: Array[String]) extends SparkListener with Logging{
+class StageRuntimeReportListener(statisticDir: String) extends SparkListener with Logging{
 
   private val taskInfoMetrics = mutable.HashMap[Int, mutable.Buffer[(TaskInfo, TaskMetrics)]]()
 
+  private val now = Calendar.getInstance()
+  private val dateFormat = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss")
+  private val timeStamp = dateFormat.format(now.getTime)
+  private val fileName = s"PageRankGraph-$timeStamp.csv"
+
+  private val headers = Array (
+    "StageId", "Name", "TaskCount", "Average", "Fastest", "Slowest", "StandardDeviation"
+  )
+
+  private val csvWriter = new CsvBeanWriter(new FileWriter(new File(statisticDir, fileName)), CsvPreference.STANDARD_PREFERENCE)
 
   /**
     * Called when a stage is submitted
@@ -66,7 +81,9 @@ class StageRuntimeReportListener(csvWriter: ICsvBeanWriter, headers: Array[Strin
     log.info("Standard deviation: {} ms", Math.sqrt(variance))
 
     val taskRuntimeStats = new TaskRuntimeStatistic
+    taskRuntimeStats.setName(info.name)
     taskRuntimeStats.setStageId(info.stageId)
+    taskRuntimeStats.setTaskCount(info.numTasks)
     taskRuntimeStats.setAverage(mean)
     taskRuntimeStats.setFastest(min)
     taskRuntimeStats.setSlowest(max)
@@ -77,10 +94,13 @@ class StageRuntimeReportListener(csvWriter: ICsvBeanWriter, headers: Array[Strin
       new org.supercsv.cellprocessor.constraint.NotNull(),
       new org.supercsv.cellprocessor.constraint.NotNull(),
       new org.supercsv.cellprocessor.constraint.NotNull(),
+      new org.supercsv.cellprocessor.constraint.NotNull(),
+      new org.supercsv.cellprocessor.constraint.NotNull(),
       new org.supercsv.cellprocessor.constraint.NotNull()
     )
 
     csvWriter.write(taskRuntimeStats, headers, processor)
+    csvWriter.flush()
 
     // Clear out the buffer to save memory
     taskInfoMetrics.remove(info.stageId)
@@ -95,5 +115,20 @@ class StageRuntimeReportListener(csvWriter: ICsvBeanWriter, headers: Array[Strin
         buffer += ((taskEnd.taskInfo, taskEnd.taskMetrics))
       }
     }
+  }
+
+
+  /**
+    * Called when the application starts
+    */
+  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
+    csvWriter.writeHeader(headers:_*)
+  }
+
+  /**
+    * Called when the application ends
+    */
+  override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+    csvWriter.close()
   }
 }

@@ -9,6 +9,24 @@ public class TaskRuntimeStatistic {
     private Long fastest;
     private Long slowest;
     private Long standardDeviation;
+    private String name;
+    private Integer taskCount;
+
+    public Integer getTaskCount() {
+        return taskCount;
+    }
+
+    public void setTaskCount(Integer taskCount) {
+        this.taskCount = taskCount;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
 
     public Integer getStageId() {
         return stageId;

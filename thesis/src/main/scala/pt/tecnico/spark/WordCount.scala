@@ -1,13 +1,6 @@
 package pt.tecnico.spark
 
-import java.io.{File, FileWriter}
-import java.text.SimpleDateFormat
-import java.util.Calendar
-
-import org.apache.spark.scheduler.{StatsReportListener, SparkListenerApplicationStart}
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
-import org.supercsv.io.{CsvBeanWriter, CsvListWriter}
-import org.supercsv.prefs.CsvPreference
 import pt.tecnico.spark.util.StageRuntimeReportListener
 
 /**
@@ -32,19 +25,7 @@ object WordCount {
       a + b
     }
 
-    val now = Calendar.getInstance()
-    val dateFormat = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss")
-    val timeStamp = dateFormat.format(now.getTime)
-    val fileName = s"stats-$timeStamp.txt"
-
-    val headers = Array (
-      "StageId", "Average", "Fastest", "Slowest", "StandardDeviation"
-    )
-
-    val csvWriter = new CsvBeanWriter(new FileWriter(new File(statisticDir, fileName)), CsvPreference.STANDARD_PREFERENCE)
-    csvWriter.writeHeader(headers:_*)
-
-    val reportListener = new StageRuntimeReportListener(csvWriter, headers)
+    val reportListener = new StageRuntimeReportListener(statisticDir)
     sc.addSparkListener(reportListener)
 
     val out = sc.textFile(inputFile)
@@ -58,8 +39,6 @@ object WordCount {
       )
       .reduceByKey((a, b) => a + b)
       .saveAsTextFile(outputFile)
-
-    csvWriter.close()
 
 //      .filter(t => t._2 > 20000)
 //      .take(50)

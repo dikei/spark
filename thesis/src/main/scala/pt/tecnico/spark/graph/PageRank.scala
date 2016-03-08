@@ -1,7 +1,8 @@
 package pt.tecnico.spark.graph
 
 import org.apache.spark.graphx.GraphLoader
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
+import pt.tecnico.spark.util.StageRuntimeReportListener
 
 /**
   * Created by dikei on 2/12/16.
@@ -18,12 +19,15 @@ object PageRank {
     val input = args(0)
     val output = args(1)
     val iteration = if (args.length > 2) args(2).toInt else 10
+    val statisticDir = args(3)
 
     val conf = new SparkConf().setAppName("PageRankGraph")
     conf.set("spark.hadoop.validateOutputSpecs", "false")
 //    conf.set("spark.scheduler.removeStageBarrier", "true")
 
     val sc = new SparkContext(conf)
+    val reportListener = new StageRuntimeReportListener(statisticDir)
+    sc.addSparkListener(reportListener)
 
     val graph = GraphLoader.edgeListFile(sc, input)
 
