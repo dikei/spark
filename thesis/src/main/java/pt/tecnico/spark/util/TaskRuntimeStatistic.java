@@ -18,6 +18,24 @@ public class TaskRuntimeStatistic {
     private Long percent95;
     private Long totalTaskRuntime;
     private Long stageRuntime;
+    private Long fetchWaitTime;
+    private Long shuffleWriteTime;
+
+    public Long getFetchWaitTime() {
+        return fetchWaitTime;
+    }
+
+    public void setFetchWaitTime(Long fetchWaitTime) {
+        this.fetchWaitTime = fetchWaitTime;
+    }
+
+    public Long getShuffleWriteTime() {
+        return shuffleWriteTime;
+    }
+
+    public void setShuffleWriteTime(Long shuffleWriteTime) {
+        this.shuffleWriteTime = shuffleWriteTime;
+    }
 
     public Long getTotalTaskRuntime() {
         return totalTaskRuntime;

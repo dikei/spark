@@ -27,7 +27,7 @@ class StageRuntimeReportListener(statisticDir: String) extends SparkListener wit
   private val fileName = s"$appName-$timeStamp.csv"
 
   private val headers = Array (
-    "StageId", "Name", "TaskCount", "TotalTaskRuntime", "StageRuntime",
+    "StageId", "Name", "TaskCount", "TotalTaskRuntime", "StageRuntime", "FetchWaitTime", "ShuffleWriteTime",
     "Average", "Fastest", "Slowest", "StandardDeviation",
     "Percent5", "Percent25", "Median", "Percent75", "Percent95"
   )
@@ -53,16 +53,26 @@ class StageRuntimeReportListener(statisticDir: String) extends SparkListener wit
       return
     }
 
-    logInfo("Stage completed: " + info)
-    logInfo("Number of tasks: " + info.numTasks)
-
     val runtime = info.completionTime.get - info.submissionTime.get
-    log.info("Stage runtime: {} ms", runtime)
 
     val stageTaskInfoMetrics = taskInfoMetrics.get(info.stageId).get.toArray
     val durations = stageTaskInfoMetrics.map { case (taskInfo, taskMetric) =>
       taskInfo.duration
     }
+
+    val fetchWaitTime = stageTaskInfoMetrics.map { case (taskInfo, taskMetric) =>
+      taskMetric.shuffleReadMetrics match {
+        case Some(metric) => metric.fetchWaitTime
+        case None => 0
+      }
+    }.sum
+
+    val shuffleWriteTime = stageTaskInfoMetrics.map { case (taskInfo, taskMetric) =>
+      taskMetric.shuffleWriteMetrics match {
+        case Some(metric) => metric.shuffleWriteTime
+        case None => 0
+      }
+    }.sum
 
     var totalDuration = 0L
     var min = Long.MaxValue
@@ -90,7 +100,12 @@ class StageRuntimeReportListener(statisticDir: String) extends SparkListener wit
     val percent75 = sortedDurations((sortedDurations.length * 0.75).toInt)
     val percent95 = sortedDurations((sortedDurations.length * 0.95).toInt)
 
+    log.info("Stage completed: {}", info)
+    log.info("Number of tasks: {}", info.numTasks)
+    log.info("Stage runtime: {} ms", runtime)
     log.info("Total task time: {} ms", totalDuration)
+    log.info("Fetch wait time: {} ms", fetchWaitTime)
+    log.info("Shuffle write time: {} ms", shuffleWriteTime)
     log.info("Average task runtime: {} ms", mean)
     log.info("Fastest task: {} ms", min)
     log.info("Slowest task: {} ms", max)
@@ -116,6 +131,8 @@ class StageRuntimeReportListener(statisticDir: String) extends SparkListener wit
     taskRuntimeStats.setPercent95(percent95)
     taskRuntimeStats.setTotalTaskRuntime(totalDuration)
     taskRuntimeStats.setStageRuntime(runtime)
+    taskRuntimeStats.setFetchWaitTime(fetchWaitTime / 1000000)
+    taskRuntimeStats.setShuffleWriteTime(shuffleWriteTime / 1000000)
 
     csvWriter.write(taskRuntimeStats, headers:_*)
     csvWriter.flush()
