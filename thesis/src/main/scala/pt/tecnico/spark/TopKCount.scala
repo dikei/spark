@@ -1,6 +1,7 @@
 package pt.tecnico.spark
 
 import org.apache.spark.{SparkContext, SparkConf}
+import pt.tecnico.spark.util.StageRuntimeReportListener
 
 /**
   * Count the K-most frequent word
@@ -10,9 +11,12 @@ object TopKCount {
     val conf = new SparkConf().setAppName("TopKCount")
     conf.set("spark.hadoop.validateOutputSpecs", "false")
 
-    val sc = new SparkContext(conf)
-
     val inputFile = args(0)
+    val statsDir = if (args.length > 1) args(1) else "stats"
+
+    val sc = new SparkContext(conf)
+    sc.addSparkListener(new StageRuntimeReportListener(statsDir))
+
     val k = if (args.length == 2) args(1).toInt else 10
     // Do the count and save output
     val result = sc.textFile(inputFile)

@@ -3,6 +3,7 @@ package pt.tecnico.spark.matrix
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.mllib.recommendation.{ALS, Rating}
+import pt.tecnico.spark.util.StageRuntimeReportListener
 
 /**
   * Matrix factorization app
@@ -12,7 +13,7 @@ object MatrixFactorApp {
     if (args.length < 4) {
       println("Usage: ")
       println("spark-submit --class pt.tecnico.spark.matrix.MatrixFactorApp " +
-        "[jar] [input] [output] [rank] [iteration]")
+        "[jar] [input] [output] [rank] [iteration] [statsDir]")
       System.exit(0)
     }
 
@@ -20,12 +21,14 @@ object MatrixFactorApp {
     val output = args(1)
     val rank = args(2).toInt
     val iteration = args(3).toInt
+    val statsDir = if (args.length > 4) args(4) else "stats"
 
     val conf = new SparkConf().setAppName("Matrix Factorization")
     conf.set("spark.hadoop.validateOutputSpecs", "false")
 //    conf.set("spark.scheduler.removeStageBarrier", "true")
 
     val sc = new SparkContext(conf)
+    sc.addSparkListener(new StageRuntimeReportListener(statsDir))
 
     val ratings = sc.textFile(input)
       .map { line =>

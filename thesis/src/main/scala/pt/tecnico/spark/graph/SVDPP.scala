@@ -4,6 +4,7 @@ import org.apache.spark.graphx.lib.SVDPlusPlus.Conf
 import org.apache.spark.graphx.{Edge, GraphLoader}
 import org.apache.spark.graphx.lib.SVDPlusPlus
 import org.apache.spark.{SparkContext, SparkConf}
+import pt.tecnico.spark.util.StageRuntimeReportListener
 
 /**
   * Created by dikei on 2/12/16.
@@ -14,7 +15,7 @@ object SVDPP {
     if (args.length < 9) {
       println("Usage: ")
       println("spark-submit --class pt.tecnico.spark.graph.SVDPP " +
-        "[jar] [input] [output] [rank] [#iteration] [minVal] [maxVal] [gamma1] [gamma2] [gamma6] [gamma7]")
+        "[jar] [input] [output] [rank] [#iteration] [minVal] [maxVal] [gamma1] [gamma2] [gamma6] [gamma7] [statsDir]")
       System.exit(0)
     }
 
@@ -28,10 +29,12 @@ object SVDPP {
     val gamma2 = args(7).toDouble
     val gamma6 = args(8).toDouble
     val gamma7 = args(9).toDouble
+    val statsDir = if (args.length > 10) args(10) else "stats"
 
     val conf = new SparkConf().setAppName("SVD++")
     conf.set("spark.hadoop.validateOutputSpecs", "false")
     val sc = new SparkContext(conf)
+    sc.addSparkListener(new StageRuntimeReportListener(statsDir))
 
     val graph = GraphLoader.edgeListFile(sc, input)
     val edges = graph.edges.map( e => new Edge(e.srcId, e.dstId, e.attr.toDouble))

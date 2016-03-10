@@ -21,6 +21,7 @@ Copy from org.apache.spark.examples.SparkPageRank
 package pt.tecnico.spark.graph
 
 import org.apache.spark.{SparkConf, SparkContext}
+import pt.tecnico.spark.util.StageRuntimeReportListener
 
 /**
   * Computes the PageRank of URLs from an input file. Input file should
@@ -38,19 +39,22 @@ object PageRankSimple {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
-      System.err.println("Usage: spark-submit --class pt.tecnico.spark.graph.PageRankSimple [jar] [input] [output] [iteration]")
+      System.err.println("Usage: spark-submit --class pt.tecnico.spark.graph.PageRankSimple [jar] [input] [output] [iteration] [statsDir]")
       System.exit(0)
     }
 
     val input = args(0)
     val output = args(1)
     val iters = if (args.length > 2) args(2).toInt else 10
+    val statsDir = if (args.length > 3) args(3) else "stats"
 
     val sparkConf = new SparkConf().setAppName("PageRankSimple")
     sparkConf.set("spark.hadoop.validateOutputSpecs", "false")
 //    sparkConf.set("spark.scheduler.removeStageBarrier", "true")
 
     val ctx = new SparkContext(sparkConf)
+    ctx.addSparkListener(new StageRuntimeReportListener(statsDir))
+
     val lines = ctx.textFile(input, 1)
     val links = lines.map{ s =>
       val parts = s.split("\\s+")

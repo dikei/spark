@@ -1,6 +1,7 @@
 package pt.tecnico.spark
 
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
+import pt.tecnico.spark.util.StageRuntimeReportListener
 
 /**
   * Word count program to test Spark
@@ -8,13 +9,15 @@ import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
 object WordCountInterval {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("WordCountInterval")
-    conf.set("spark.hadoop.validateOutputSpecs", "false")
-
-    val sc = new SparkContext(conf)
-
     val inputFile = args(0)
     val outputFile = args(1)
+    val statsDir = if (args.length > 2) args(2) else "stats"
+
+    val conf = new SparkConf().setAppName("WordCountInterval")
+    conf.set("spark.hadoop.validateOutputSpecs", "false")
+    val sc = new SparkContext(conf)
+    sc.addSparkListener(new StageRuntimeReportListener(statsDir))
+
     val createCombiner = (v: Int) => v
     val mergeValue = (a: Int, b: Int) => a + b
     val mergeCombiners = (a: Int, b: Int) => {

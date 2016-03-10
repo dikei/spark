@@ -17,7 +17,8 @@ object WordCount {
 
     val inputFile = args(0)
     val outputFile = args(1)
-    val statisticDir = args(2)
+    val statisticDir = if (args.length > 2) args(2) else "stats"
+
     // Do the word count and save output
     val createCombiner = (v: Int) => v
     val mergeValue = (a: Int, b: Int) => a + b
