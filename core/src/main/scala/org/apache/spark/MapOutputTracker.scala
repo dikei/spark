@@ -100,7 +100,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /** Remembers which map output locations are currently being fetched on an executor. */
   private val fetching = new HashSet[Int]
-  /** Remembers last time we do the fetch to prevent excessive fetching **/
+
+  /** Remembers last time we do the fetch to prevent excessive fetching */
   private val lastFetchs = new HashMap[Int, Long]
 
   /**
@@ -209,7 +210,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         // someone fetched it in between the get and the fetching.synchronized.
         fetchedStatuses = mapStatuses.get(shuffleId).orNull
         if (fetchedStatuses == null ||
-          (removeStageBarrier && fetchedStatuses.contains(null) && currentTime - lastFetch > 1000)) {
+          (removeStageBarrier &&
+            fetchedStatuses.contains(null) &&
+            currentTime - lastFetch > 1000)) {
           // We have to do the fetch, get others to wait for us.
           fetching += shuffleId
           lastFetchs += shuffleId -> currentTime
@@ -464,6 +467,12 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
         case None =>
           statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
           epochGotten = epoch
+      }
+    }
+    if (statuses != null) {
+      statuses.foreach { s =>
+        if (s != null)
+          log.info("Map location: {}", s.location)
       }
     }
     // If we got here, we failed to find the serialized locations in the cache, so we pulled

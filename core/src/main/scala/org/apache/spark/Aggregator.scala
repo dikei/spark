@@ -45,12 +45,16 @@ case class Aggregator[K, V, C] (
       context: TaskContext): Iterator[(K, C)] = {
     interval match {
       case None =>
-        val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+        val combiners = new ExternalAppendOnlyMap[K, V, C](
+          createCombiner, mergeValue, mergeCombiners
+        )
         combiners.insertAll(iter, timeout)
         updateMetrics(context, combiners)
         combiners.iterator
       case Some(time) =>
-        new AggregateValueByIntervalInterator[K, V, C](iter, context, createCombiner, mergeValue, mergeCombiners, time)
+        new AggregateValueByIntervalInterator[K, V, C](
+          iter, context, createCombiner, mergeValue, mergeCombiners, time
+        )
     }
   }
 

@@ -40,9 +40,11 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val removeStageBarrier = SparkEnv.get.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
+    val removeStageBarrier =
+      SparkEnv.get.conf.getBoolean("spark.scheduler.removeStageBarrier", false)
     // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
-    val maxBytesInFlight = SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
+    val maxBytesInFlight =
+      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
 
     val blockFetcherItr = if (!removeStageBarrier) {
       new ShuffleBlockFetcherIterator(

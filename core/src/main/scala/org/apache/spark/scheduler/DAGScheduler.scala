@@ -184,7 +184,8 @@ class DAGScheduler(
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
-  private val removeStageBarrier = sc.getConf.getBoolean("spark.scheduler.removeStageBarrier", false)
+  private val removeStageBarrier =
+    sc.getConf.getBoolean("spark.scheduler.removeStageBarrier", false)
   private val dependantStagesStarted = new mutable.HashSet[Stage]()
 
   /**
@@ -1341,7 +1342,7 @@ class DAGScheduler(
 
           dependantStagesStarted ++= getMissingParentStages(stage)
 
-          //Remove waiting stage and submit all its task
+          // Remove waiting stage and submit all its task
           waitingStages -= stage
           submitMissingTasks(stage, activeJobForStage(stage).get)
         case None =>
