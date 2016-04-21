@@ -1,4 +1,4 @@
-package org.apache.spark.shuffle.hash
+package org.apache.spark.shuffle.memory
 
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus

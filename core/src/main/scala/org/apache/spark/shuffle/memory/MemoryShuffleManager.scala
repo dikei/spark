@@ -1,8 +1,7 @@
-package org.apache.spark.shuffle.hash
+package org.apache.spark.shuffle.memory
 
-import org.apache.spark.{Logging, ShuffleDependency, SparkConf, TaskContext}
 import org.apache.spark.shuffle._
-import scala.collection.mutable
+import org.apache.spark.{Logging, ShuffleDependency, SparkConf, TaskContext}
 
 /**
   * Shuffle manager that keep all shuffle block in-memory
