@@ -23,12 +23,25 @@ class MemoryShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     * throws an unspecified exception.
     */
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
-    val bytes = blockManager.memoryStore.getBytes(blockId)
-    bytes match {
+    val inMem = blockManager.memoryStore.getBytes(blockId)
+
+
+    inMem match {
       case Some(byteBuffer) => new NioManagedBuffer(byteBuffer)
       case _ =>
-        logError(s"No block available for $blockId")
-        throw new Exception(s"No block available for $blockId")
+        try {
+          val onDisk = blockManager.diskStore.getBytes(blockId)
+          onDisk match {
+            case Some(byteBuffer) => new NioManagedBuffer(byteBuffer)
+            case _ =>
+              logError(s"No data available for $blockId")
+              throw new Exception(s"No data available for $blockId")
+          }
+        } catch {
+          case e: Exception =>
+            log.error("Exception reading block from disk", e)
+            throw e
+        }
     }
   }
 

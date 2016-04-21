@@ -15,6 +15,7 @@ class MemoryShuffleManager(conf: SparkConf)  extends ShuffleManager with Logging
     * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
     */
   override def registerShuffle[K, V, C](shuffleId: Int, numMaps: Int, dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
+    log.info("New shuffle {} with {} maps", shuffleId, numMaps)
     new BaseShuffleHandle[K, V, C](shuffleId, numMaps, dependency)
   }
 
@@ -34,6 +35,7 @@ class MemoryShuffleManager(conf: SparkConf)  extends ShuffleManager with Logging
     * @return true if the metadata removed successfully, otherwise false.
     */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
+    log.info("Removing shuffle {}", shuffleId)
     memoryShuffleBlockResolver.removeShuffle(shuffleId)
   }
 

@@ -29,6 +29,7 @@ class MemoryShuffleWriter[K, V](
 
   /** Write a sequence of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
+    log.info("Writing shuffle output to memory")
     val iter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         dep.aggregator.get.combineValuesByKey(records, context)
@@ -70,11 +71,12 @@ class MemoryShuffleWriter[K, V](
     * Save the block to memory store for retrieval
     */
   private def commit(): MapStatus = {
+    log.info("Saving map output to memory")
     val sizes = writers.zipWithIndex.map { case (writer, bucketId) =>
       if (writer.isOpen) {
         val blockId = new ShuffleBlockId(handle.shuffleId, mapId, bucketId)
         writer.close()
-        blockManager.memoryStore.putBytes(blockId, writer.getByteBuffer(), StorageLevel.MEMORY_ONLY).size
+        blockManager.memoryStore.putBytes(blockId, writer.getByteBuffer(), StorageLevel.MEMORY_AND_DISK).size
       }
       else 0
     }
