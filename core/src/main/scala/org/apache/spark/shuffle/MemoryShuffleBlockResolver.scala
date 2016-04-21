@@ -5,8 +5,11 @@ import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, MemoryBlockObjectWriter, ShuffleBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 import java.io.OutputStream
+import java.util.concurrent.ConcurrentLinkedQueue
+import scala.collection.JavaConverters._
+
 import scala.collection.mutable
 
 /**
@@ -19,13 +22,25 @@ class MemoryShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
   private val bufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
 
   /**
+    * Contains all the state related to a particular shuffle.
+    */
+  private class ShuffleState(val numReducers: Int) {
+    /**
+      * The mapIds of all map tasks completed on this Executor for this shuffle.
+      */
+    val completedMapTasks = new ConcurrentLinkedQueue[Int]()
+  }
+
+  private val shuffleStates = new TimeStampedHashMap[ShuffleId, ShuffleState]
+  private val metadataCleaner =
+    new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup, conf)
+
+  /**
     * Retrieve the data for the specified block. If the data for that block is not available,
     * throws an unspecified exception.
     */
   override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
     val inMem = blockManager.memoryStore.getBytes(blockId)
-
-
     inMem match {
       case Some(byteBuffer) => new NioManagedBuffer(byteBuffer)
       case _ =>
@@ -46,7 +61,7 @@ class MemoryShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
   }
 
   override def stop(): Unit = {
-
+    metadataCleaner.cancel()
   }
 
   def getWriters(
@@ -55,7 +70,7 @@ class MemoryShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
       numReducers: Int,
       serializer: Serializer,
       writeMetrics: ShuffleWriteMetrics): Array[MemoryBlockObjectWriter] = {
-
+    shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numReducers))
     val serializerInstance = serializer.newInstance()
     Array.tabulate[MemoryBlockObjectWriter](numReducers) { bucketId =>
       val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
@@ -66,12 +81,39 @@ class MemoryShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     }
   }
 
-  def removeShuffle(shuffleId: Int): Boolean = {
-    for(blocks <- shuffleToBlockId.get(shuffleId)) {
-      for (blockId <- blocks) {
-        blockManager.memoryStore.remove(blockId)
-      }
+  def releaseShuffle(shuffleId: ShuffleId, mapId: Int): Unit = {
+    val shuffleState = shuffleStates(shuffleId)
+    shuffleState.completedMapTasks.add(mapId)
+  }
+
+  /** Remove all the blocks / files and metadata related to a particular shuffle. */
+  def removeShuffle(shuffleId: ShuffleId): Boolean = {
+    // Do not change the ordering of this, if shuffleStates should be removed only
+    // after the corresponding shuffle blocks have been removed
+    val cleaned = removeShuffleBlocks(shuffleId)
+    shuffleStates.remove(shuffleId)
+    cleaned
+  }
+
+  /** Remove all the blocks / files related to a particular shuffle. */
+  private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
+    log.info(s"Removing shuffle data for $shuffleId")
+    shuffleStates.get(shuffleId) match {
+      case Some(state) =>
+        for (mapId <- state.completedMapTasks.asScala; reduceId <- 0 until state.numReducers) {
+          val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
+          if (!blockManager.memoryStore.remove(blockId)) {
+            blockManager.diskStore.remove(blockId)
+          }
+        }
+        true
+      case None =>
+        logInfo("Could not find shuffle " + shuffleId + " for deleting")
+        false
     }
-    true
+  }
+
+  private def cleanup(cleanupTime: Long) {
+    shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => removeShuffleBlocks(shuffleId))
   }
 }

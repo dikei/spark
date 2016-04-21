@@ -53,17 +53,19 @@ class MemoryShuffleWriter[K, V](
       return None
     }
     stopping = true
-    if (success) {
-      try {
-        Some(commit())
-      } catch {
-        case e: Exception =>
-          cleanup()
-          throw e
+    try {
+      if (success) {
+        try {
+          Some(commit())
+        } catch {
+          case e: Exception =>
+            throw e
+        }
+      } else {
+        None
       }
-    } else {
-      cleanup()
-      None
+    } finally {
+      shuffleBlockResolver.releaseShuffle(handle.shuffleId, mapId)
     }
   }
 
@@ -82,15 +84,5 @@ class MemoryShuffleWriter[K, V](
     }
 
     MapStatus(blockManager.shuffleServerId, sizes)
-  }
-
-  /**
-    * Cleanup
-    */
-  private def cleanup(): Unit = {
-    writers.zipWithIndex.foreach { case(_, bucketId) =>
-      val blockId = new ShuffleBlockId(handle.shuffleId, mapId, bucketId)
-      blockManager.memoryStore.remove(blockId)
-    }
   }
 }
