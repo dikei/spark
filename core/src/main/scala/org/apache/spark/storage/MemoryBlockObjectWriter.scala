@@ -38,13 +38,22 @@ private[spark] class MemoryBlockObjectWriter(
   extends OutputStream
   with Logging {
 
+  /**
+    * Add getByteBuffer to avoid copying buf when calling toByteArray
+    */
+  private class ZeroCopyByteArrayOutputStream extends ByteArrayOutputStream {
+    def getByteBuffer: ByteBuffer = {
+      ByteBuffer.wrap(buf, 0, count)
+    }
+  }
+
   private var bs: OutputStream = null
-  private var bos: ByteArrayOutputStream = null
+  private var bos: ZeroCopyByteArrayOutputStream = null
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private var initialized = false
   private var hasBeenClosed = false
-  private var result: Array[Byte] = null
+  private var result: ByteBuffer = null
 
   /**
    * Keep track of number of records written and also use this to periodically
@@ -57,7 +66,7 @@ private[spark] class MemoryBlockObjectWriter(
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
-    bos = new ByteArrayOutputStream()
+    bos = new ZeroCopyByteArrayOutputStream()
     ts = new TimeTrackingOutputStream(writeMetrics, bos)
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
     objOut = serializerInstance.serializeStream(bs)
@@ -78,7 +87,7 @@ private[spark] class MemoryBlockObjectWriter(
         objOut.close()
       }
 
-      result = bos.toByteArray
+      result = bos.getByteBuffer
       bs = null
       bos = null
       ts = null
@@ -125,8 +134,8 @@ private[spark] class MemoryBlockObjectWriter(
     }
   }
 
-  def getByteBuffer(): ByteBuffer = {
-    ByteBuffer.wrap(result)
+  def getResult: ByteBuffer = {
+    result
   }
 
   /**

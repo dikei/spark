@@ -78,7 +78,7 @@ class MemoryShuffleWriter[K, V](
       if (writer.isOpen) {
         val blockId = new ShuffleBlockId(handle.shuffleId, mapId, bucketId)
         writer.close()
-        blockManager.memoryStore.putBytes(blockId, writer.getByteBuffer(), StorageLevel.MEMORY_AND_DISK).size
+        blockManager.memoryStore.putBytes(blockId, writer.getResult, StorageLevel.MEMORY_AND_DISK).size
       }
       else 0
     }
