@@ -429,17 +429,41 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       var freedMemory = 0L
       val rddToAdd = blockId.flatMap(getRddId)
       val selectedBlocks = new ArrayBuffer[BlockId]
+      val memoryShuffle = conf.get("spark.shuffle.manager", "").eq("memory")
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
       // can lead to exceptions.
       entries.synchronized {
         val iterator = entries.entrySet().iterator()
-        while (freedMemory < space && iterator.hasNext) {
-          val pair = iterator.next()
-          val blockId = pair.getKey
-          if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
-            selectedBlocks += blockId
-            freedMemory += pair.getValue.size
+        if (memoryShuffle) {
+          blockId match {
+            case Some(s: ShuffleBlockId) =>
+              while (freedMemory < space && iterator.hasNext) {
+                val pair = iterator.next()
+                val blockId = pair.getKey
+                if (blockId.isInstanceOf[ShuffleBlockId] && (rddToAdd.isEmpty || rddToAdd != getRddId(blockId))) {
+                  selectedBlocks += blockId
+                  freedMemory += pair.getValue.size
+                }
+              }
+            case _ =>
+              while (freedMemory < space && iterator.hasNext) {
+                val pair = iterator.next()
+                val blockId = pair.getKey
+                if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
+                  selectedBlocks += blockId
+                  freedMemory += pair.getValue.size
+                }
+              }
+          }
+        } else {
+          while (freedMemory < space && iterator.hasNext) {
+            val pair = iterator.next()
+            val blockId = pair.getKey
+            if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
+              selectedBlocks += blockId
+              freedMemory += pair.getValue.size
+            }
           }
         }
       }
