@@ -43,6 +43,10 @@ class PartialShuffleBlockFetcherIterator(
     maxBytesInFlight: Long)
   extends Iterator[(BlockId, InputStream)] with Logging{
 
+  private val REFRESH_INTERVAL = 1000
+
+  private[this] val shuffleMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
+
   private val readyBlocks = new mutable.HashSet[Int]()
 
   private var blockFetcherIter: ShuffleBlockFetcherIterator = null
@@ -84,14 +88,15 @@ class PartialShuffleBlockFetcherIterator(
       case (s, i) => s != null && !readyBlocks.contains(i)
     }
     while (!newBlocksAvailable) {
+      val startWaitTime = System.currentTimeMillis()
       // Wait until new block is available
       log.info("Waiting 1s for new block to be available")
-      log.info("Status with index: {}", statusWithIndex)
-      Thread.sleep(1000)
+      Thread.sleep(REFRESH_INTERVAL)
       statusWithIndex = statuses.zipWithIndex
       newBlocksAvailable = statusWithIndex.exists {
         case (s, i) => s != null && !readyBlocks.contains(i)
       }
+      shuffleMetrics.incWaitForPartialOutputTime(System.currentTimeMillis() - startWaitTime)
     }
 
     val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
@@ -104,7 +109,7 @@ class PartialShuffleBlockFetcherIterator(
         readyBlocks += mapId
       }
     }
-
+    log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
     log.info("Ready block: {}", readyBlocks)
 
     if (readyBlocks.size == statuses.length) {
