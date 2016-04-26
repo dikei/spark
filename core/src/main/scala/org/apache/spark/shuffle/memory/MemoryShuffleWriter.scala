@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.shuffle.memory
 
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -23,7 +40,12 @@ class MemoryShuffleWriter[K, V](
   context.taskMetrics().shuffleWriteMetrics = Some(writeMetrics)
 
   private val writers: Array[MemoryBlockObjectWriter] =
-    shuffleBlockResolver.getWriters(handle.shuffleId, mapId, dep.partitioner.numPartitions, serializer, writeMetrics)
+    shuffleBlockResolver.getWriters(
+      handle.shuffleId,
+      mapId,
+      dep.partitioner.numPartitions,
+      serializer,
+      writeMetrics)
 
   private var stopping = false
 
@@ -78,7 +100,11 @@ class MemoryShuffleWriter[K, V](
       if (writer.isOpen) {
         val blockId = new ShuffleBlockId(handle.shuffleId, mapId, bucketId)
         writer.close()
-        blockManager.memoryStore.putBytes(blockId, writer.getResult, StorageLevel.MEMORY_AND_DISK).size
+        blockManager.memoryStore.putBytes(
+          blockId,
+          writer.getResult,
+          StorageLevel.MEMORY_AND_DISK
+        ).size
       }
       else 0
     }

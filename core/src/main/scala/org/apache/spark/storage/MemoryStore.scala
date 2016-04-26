@@ -438,10 +438,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         if (memoryShuffle) {
           blockId match {
             case Some(s: ShuffleBlockId) =>
+              // Shuffle block id only evict other shuffle block id
               while (freedMemory < space && iterator.hasNext) {
                 val pair = iterator.next()
                 val blockId = pair.getKey
-                if (blockId.isInstanceOf[ShuffleBlockId] && (rddToAdd.isEmpty || rddToAdd != getRddId(blockId))) {
+                if (blockId.isInstanceOf[ShuffleBlockId]) {
                   selectedBlocks += blockId
                   freedMemory += pair.getValue.size
                 }

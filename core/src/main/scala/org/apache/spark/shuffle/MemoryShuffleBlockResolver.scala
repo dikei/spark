@@ -1,15 +1,33 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.shuffle
 
-import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.{Logging, SparkConf, SparkEnv}
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, MemoryBlockObjectWriter, ShuffleBlockId}
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentLinkedQueue
-import scala.collection.JavaConverters._
 
+import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.storage.{MemoryBlockObjectWriter, ShuffleBlockId}
+import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
+import org.apache.spark.{Logging, SparkConf, SparkEnv}
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 /**
@@ -74,10 +92,19 @@ class MemoryShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     val serializerInstance = serializer.newInstance()
     Array.tabulate[MemoryBlockObjectWriter](numReducers) { bucketId =>
       val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-      shuffleToBlockId.getOrElseUpdate(shuffleId, new mutable.ArrayBuffer[ShuffleBlockId]()) += blockId
+      shuffleToBlockId.getOrElseUpdate(
+        shuffleId,
+        new mutable.ArrayBuffer[ShuffleBlockId]()
+      ) += blockId
       val compression: OutputStream => OutputStream = blockManager.wrapForCompression(blockId, _)
       val syncWrites = conf.getBoolean("spark.shuffle.sync", defaultValue = false)
-      new MemoryBlockObjectWriter(serializerInstance, bufferSize, compression, syncWrites, writeMetrics, blockId)
+      new MemoryBlockObjectWriter(
+        serializerInstance,
+        bufferSize,
+        compression,
+        syncWrites,
+        writeMetrics,
+        blockId)
     }
   }
 

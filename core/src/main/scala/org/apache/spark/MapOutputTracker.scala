@@ -469,12 +469,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
           epochGotten = epoch
       }
     }
-    if (statuses != null) {
-      statuses.foreach { s =>
-        if (s != null)
-          log.info("Map location: {}", s.location)
-      }
-    }
     // If we got here, we failed to find the serialized locations in the cache, so we pulled
     // out a snapshot of the locations as "statuses"; let's serialize and return that
     val bytes = MapOutputTracker.serializeMapStatuses(statuses)
