@@ -186,7 +186,7 @@ class DAGScheduler(
 
   private val removeStageBarrier =
     sc.getConf.getBoolean("spark.scheduler.removeStageBarrier", false)
-  private val dependantStagesStarted = new mutable.HashSet[Stage]()
+  private val needToCommitOutputStages = new mutable.HashSet[Stage]()
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -1190,11 +1190,11 @@ class DAGScheduler(
             }
 
             // If a dependant stage is started, commit the data of the parent stage
-            if (removeStageBarrier && dependantStagesStarted.contains(stage)) {
+            if (removeStageBarrier && needToCommitOutputStages.contains(stage)) {
               mapOutputTracker.registerMapOutputs(
                 shuffleStage.shuffleDep.shuffleId,
                 shuffleStage.outputLocInMapOutputTrackerFormat(),
-                changeEpoch = false)
+                changeEpoch = true)
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
@@ -1234,7 +1234,7 @@ class DAGScheduler(
                 }
               }
 
-              dependantStagesStarted -= stage
+              needToCommitOutputStages -= stage
 
               // Note: newly runnable stages will be submitted below when we submit waiting stages
             } else if (removeStageBarrier) {
@@ -1317,16 +1317,18 @@ class DAGScheduler(
   }
 
   private[scheduler] def tryStartNextStage(shuffleStage: ShuffleMapStage): Unit = {
-    val pendingMapTasks = runningStages.map { stage =>
-      stage.pendingPartitions.size
-    }.sum
+    var pendingMapTasks = 0
+    runningStages.foreach { stage =>
+      pendingMapTasks += stage.pendingPartitions.size
+    }
     log.info("Pending map tasks: {}", pendingMapTasks)
     if (taskScheduler.freeSlotAvailable(pendingMapTasks)) {
       log.info("Free slot available. Try starting next stage")
       // Search the waiting stages for stage that all missing parents are
       // not waiting or failed
+      var parents: List[Stage] = null
       val candidate = waitingStages.find { stage =>
-        val parents = getMissingParentStages(stage)
+        parents = getMissingParentStages(stage)
         parents.forall( p => !waitingStages.contains(p) && !failedStages.contains(p))
       }
 
@@ -1334,13 +1336,19 @@ class DAGScheduler(
         case Some(stage) =>
           log.info("Starting stage: {}", stage.id)
 
-          // Register the map output immediately so we have something to read from
-          mapOutputTracker.registerMapOutputs(
-            shuffleStage.shuffleDep.shuffleId,
-            shuffleStage.outputLocInMapOutputTrackerFormat(),
-            changeEpoch = false)
+          parents.foreach {
+            case (s: ShuffleMapStage) =>
+              // Register the map output immediately so we have something to read from
+              log.info("Saving map output of {} for {} to read", s.id, stage.id)
+              mapOutputTracker.registerMapOutputs(
+                shuffleStage.shuffleDep.shuffleId,
+                shuffleStage.outputLocInMapOutputTrackerFormat(),
+                changeEpoch = true)
+            case other =>
+              log.info("Parent {} of stage {} is not a shuffle map stage", other.id, stage.id)
+          }
 
-          dependantStagesStarted ++= getMissingParentStages(stage)
+          needToCommitOutputStages ++= parents
 
           // Remove waiting stage and submit all its task
           waitingStages -= stage
