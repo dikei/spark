@@ -1267,6 +1267,9 @@ class DAGScheduler(
             logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
               s"due to a fetch failure from $mapStage (${mapStage.name})")
             markStageAsFinished(failedStage, Some(failureMessage))
+            if (removeStageBarrier) {
+              killPrestartedDependantStages(failedStage)
+            }
           } else {
             logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
               s"longer running")
@@ -1298,8 +1301,6 @@ class DAGScheduler(
             mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
           }
 
-          killPrestartedDependantStages(stage)
-
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
             handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
@@ -1323,7 +1324,7 @@ class DAGScheduler(
   }
 
   def killPrestartedDependantStages(parentStage: Stage): Unit = {
-    log.info("Killing pre-started stages because this stage fail")
+    log.info("Killing pre-started stages because stage {} fail", parentStage.id)
     for (stages <- needToCommitOutputStages.get(parentStage)) {
       markFailedStages(stages)
     }
