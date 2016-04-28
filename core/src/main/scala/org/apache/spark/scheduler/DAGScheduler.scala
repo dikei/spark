@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.{mutable, Map}
-import scala.collection.mutable.{HashMap, HashSet, Stack}
+import scala.collection.mutable.{HashMap, HashSet, Stack, ArrayBuffer}
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -1223,17 +1223,12 @@ class DAGScheduler(
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
                   ") because some of its tasks had failed: " +
                   shuffleStage.findMissingPartitions().mkString(", "))
-                // Kill the pre-started stages as well, otherwise we might have a deadlock
-                log.info("Killing pre-started stages because this stage fail")
-                for (stages <- needToCommitOutputStages.get(shuffleStage)) {
-                  stages.foreach { stage =>
-                    runningStages -= stage
-                    taskScheduler.killStage(stage.id)
+                if (removeStageBarrier) {
+                  // Kill the pre-started stages as well, otherwise we might have a deadlock
+                  log.info("Killing pre-started stages because this stage fail")
+                  for (stages <- needToCommitOutputStages.get(shuffleStage)) {
+                    markFailedStages(stages)
                   }
-                  if (failedStages.isEmpty) {
-                    eventProcessLoop.post(ResubmitFailedStages)
-                  }
-                  failedStages ++= stages
                 }
                 submitStage(shuffleStage)
               } else {
@@ -1326,6 +1321,19 @@ class DAGScheduler(
         // will abort the job.
     }
     submitWaitingStages()
+  }
+
+  def markFailedStages(stages: ArrayBuffer[Stage]): failedStages.type = {
+    stages.foreach { stage =>
+      taskScheduler.killStage(stage.id)
+      markStageAsFinished(stage, Some(s"Stage ${stage.id} failed because of parent stages failure"))
+    }
+    if (failedStages.isEmpty) {
+      messageScheduler.schedule(new Runnable {
+        override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+      }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+    }
+    failedStages ++= stages
   }
 
   private[scheduler] def tryStartNextStage(shuffleStage: ShuffleMapStage): Unit = {
