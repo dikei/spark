@@ -593,6 +593,18 @@ private[spark] class TaskSchedulerImpl(
   override def freeSlotAvailable(pendingMapTasks: Int): Boolean = {
     backend.freeSlotAvailable(pendingMapTasks)
   }
+
+  override def killStage(stageId: Int): Unit = synchronized {
+    log.info("Killing stage {}", stageId)
+    val attempts = taskSetsByStageIdAndAttempt(stageId)
+    attempts.foreach { case (_, tsm) =>
+      tsm.runningTasksSet.foreach { taskId =>
+        val executorId = taskIdToExecutorId(taskId)
+        backend.killTask(taskId, executorId, interruptThread = false)
+      }
+      tsm.kill
+    }
+  }
 }
 
 

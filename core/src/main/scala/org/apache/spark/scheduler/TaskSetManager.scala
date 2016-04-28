@@ -911,6 +911,12 @@ private[spark] class TaskSetManager(
   def executorAdded() {
     recomputeLocality()
   }
+
+  def kill(): Unit = {
+    isZombie = true
+    runningTasksSet.clear()
+    maybeFinishTaskSet()
+  }
 }
 
 private[spark] object TaskSetManager {

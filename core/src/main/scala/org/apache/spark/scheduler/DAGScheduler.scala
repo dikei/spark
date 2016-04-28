@@ -186,7 +186,7 @@ class DAGScheduler(
 
   private val removeStageBarrier =
     sc.getConf.getBoolean("spark.scheduler.removeStageBarrier", false)
-  private val needToCommitOutputStages = new mutable.HashSet[Stage]()
+  private val needToCommitOutputStages = new mutable.HashMap[Stage, mutable.ArrayBuffer[Stage]]()
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -1223,6 +1223,18 @@ class DAGScheduler(
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
                   ") because some of its tasks had failed: " +
                   shuffleStage.findMissingPartitions().mkString(", "))
+                // Kill the pre-started stages as well, otherwise we might have a deadlock
+                log.info("Killing pre-started stages because this stage fail")
+                for (stages <- needToCommitOutputStages.get(shuffleStage)) {
+                  stages.foreach { stage =>
+                    runningStages -= stage
+                    taskScheduler.killStage(stage.id)
+                  }
+                  if (failedStages.isEmpty) {
+                    eventProcessLoop.post(ResubmitFailedStages)
+                  }
+                  failedStages ++= stages
+                }
                 submitStage(shuffleStage)
               } else {
                 // Mark any map-stage jobs waiting on this stage as finished
@@ -1338,17 +1350,18 @@ class DAGScheduler(
 
           parents.foreach {
             case (s: ShuffleMapStage) =>
-              // Register the map output immediately so we have something to read from
-              log.info("Saving map output of {} for {} to read", s.id, stage.id)
-              mapOutputTracker.registerMapOutputs(
-                shuffleStage.shuffleDep.shuffleId,
-                shuffleStage.outputLocInMapOutputTrackerFormat(),
-                changeEpoch = true)
+              if (runningStages.contains(s)) {
+                // Register the map output immediately so we have something to read from
+                log.info("Saving map output of {} for {} to read", s.id, stage.id)
+                mapOutputTracker.registerMapOutputs(
+                  shuffleStage.shuffleDep.shuffleId,
+                  shuffleStage.outputLocInMapOutputTrackerFormat(),
+                  changeEpoch = true)
+                needToCommitOutputStages.getOrElseUpdate(s, new mutable.ArrayBuffer[Stage]()) += stage
+              }
             case other =>
               log.info("Parent {} of stage {} is not a shuffle map stage", other.id, stage.id)
           }
-
-          needToCommitOutputStages ++= parents
 
           // Remove waiting stage and submit all its task
           waitingStages -= stage
