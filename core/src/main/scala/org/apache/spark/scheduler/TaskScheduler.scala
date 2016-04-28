@@ -89,5 +89,5 @@ private[spark] trait TaskScheduler {
 
   def freeSlotAvailable(pendingMapTasks: Int): Boolean = false
 
-  def killStage(stageId: Int): Unit
+  def killStage(stageId: Int): Unit = {}
 }
