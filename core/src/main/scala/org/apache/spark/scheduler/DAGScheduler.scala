@@ -1225,10 +1225,7 @@ class DAGScheduler(
                   shuffleStage.findMissingPartitions().mkString(", "))
                 if (removeStageBarrier) {
                   // Kill the pre-started stages as well, otherwise we might have a deadlock
-                  log.info("Killing pre-started stages because this stage fail")
-                  for (stages <- needToCommitOutputStages.get(shuffleStage)) {
-                    markFailedStages(stages)
-                  }
+                  killPrestartedDependantStages(shuffleStage)
                 }
                 submitStage(shuffleStage)
               } else {
@@ -1301,6 +1298,8 @@ class DAGScheduler(
             mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
           }
 
+          killPrestartedDependantStages(stage)
+
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
             handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
@@ -1321,6 +1320,13 @@ class DAGScheduler(
         // will abort the job.
     }
     submitWaitingStages()
+  }
+
+  def killPrestartedDependantStages(parentStage: Stage): Unit = {
+    log.info("Killing pre-started stages because this stage fail")
+    for (stages <- needToCommitOutputStages.get(parentStage)) {
+      markFailedStages(stages)
+    }
   }
 
   def markFailedStages(stages: ArrayBuffer[Stage]): failedStages.type = {
