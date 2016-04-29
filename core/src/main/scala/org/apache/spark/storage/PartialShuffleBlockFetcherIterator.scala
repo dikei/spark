@@ -23,7 +23,7 @@ import org.apache.spark.MapOutputTracker._
 import org.apache.spark.network.shuffle.ShuffleClient
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.{MapOutputTracker, TaskContext, Logging}
+import org.apache.spark.{Logging, MapOutputTracker, SparkEnv, TaskContext}
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -43,7 +43,8 @@ class PartialShuffleBlockFetcherIterator(
     maxBytesInFlight: Long)
   extends Iterator[(BlockId, InputStream)] with Logging{
 
-  private val REFRESH_INTERVAL = 1000
+  private val refreshInterval =
+    SparkEnv.get.conf.getLong("spark.shuffle.mapOutputRefreshInterval", 1000)
 
   private[this] val shuffleMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
 
@@ -90,8 +91,8 @@ class PartialShuffleBlockFetcherIterator(
     while (!newBlocksAvailable) {
       val startWaitTime = System.currentTimeMillis()
       // Wait until new block is available
-      log.info("Waiting 1s for new block to be available")
-      Thread.sleep(REFRESH_INTERVAL)
+      log.info("Waiting {} ms for new block to be available", refreshInterval)
+      Thread.sleep(refreshInterval)
       statusWithIndex = statuses.zipWithIndex
       newBlocksAvailable = statusWithIndex.exists {
         case (s, i) => s != null && !readyBlocks.contains(i)
