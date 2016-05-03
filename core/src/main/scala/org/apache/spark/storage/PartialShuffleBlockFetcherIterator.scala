@@ -111,7 +111,6 @@ class PartialShuffleBlockFetcherIterator(
       }
     }
     log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
-    log.info("Ready block: {}", readyBlocks)
 
     if (readyBlocks.size == statuses.length) {
       finished = true
