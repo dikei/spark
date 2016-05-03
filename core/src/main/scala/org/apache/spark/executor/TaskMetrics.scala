@@ -207,6 +207,7 @@ class TaskMetrics extends Serializable {
         merged.incLocalBytesRead(depMetrics.localBytesRead)
         merged.incRecordsRead(depMetrics.recordsRead)
         merged.incWaitForPartialOutputTime(depMetrics.waitForPartialOutputTime)
+        merged.incInitialReadTime(depMetrics.initialReadTime)
       }
       _shuffleReadMetrics = Some(merged)
     }
@@ -408,6 +409,11 @@ class ShuffleReadMetrics extends Serializable {
   def waitForPartialOutputTime: Long = _waitForPartialOutputTime
   private[spark] def incWaitForPartialOutputTime(value: Long) = _waitForPartialOutputTime += value
   private[spark] def decWaitForPartialOutputTime(value: Long) = _waitForPartialOutputTime -= value
+
+  private var _initialReadTime: Long = _
+  def initialReadTime: Long = _initialReadTime
+  private[spark] def incInitialReadTime(value: Long) = _initialReadTime += value
+  private[spark] def decInitialReadTime(value: Long) = _initialReadTime -= value
 }
 
 /**

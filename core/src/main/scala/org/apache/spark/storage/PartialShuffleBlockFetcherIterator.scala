@@ -48,6 +48,9 @@ class PartialShuffleBlockFetcherIterator(
 
   private[this] val shuffleMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
 
+  private val initTime = System.currentTimeMillis()
+  private var firstRead = true
+
   private val readyBlocks = new mutable.HashSet[Int]()
 
   private var blockFetcherIter: ShuffleBlockFetcherIterator = null
@@ -89,8 +92,13 @@ class PartialShuffleBlockFetcherIterator(
       case (s, i) => s != null && !readyBlocks.contains(i)
     }
     while (!newBlocksAvailable) {
+      if (firstRead) {
+        firstRead = false
+        shuffleMetrics.incInitialReadTime(System.currentTimeMillis() - initTime)
+      }
       val startWaitTime = System.currentTimeMillis()
       // Wait until new block is available
+      shuffleMetrics.initialReadTime
       log.info("Waiting {} ms for new block to be available", refreshInterval)
       Thread.sleep(refreshInterval)
       statusWithIndex = statuses.zipWithIndex
