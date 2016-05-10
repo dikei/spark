@@ -98,7 +98,6 @@ class PartialShuffleBlockFetcherIterator(
       }
       val startWaitTime = System.currentTimeMillis()
       // Wait until new block is available
-      shuffleMetrics.initialReadTime
       log.info("Waiting {} ms for new block to be available", refreshInterval)
       Thread.sleep(refreshInterval)
       statusWithIndex = statuses.zipWithIndex
