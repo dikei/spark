@@ -147,7 +147,7 @@ object PageRank extends Logging {
         (id, oldRank, msgSum) => rPrb(src, id) + (1.0 - resetProb) * msgSum
       }.cache()
 
-      rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
+//      rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
       logInfo(s"PageRank finished iteration $iteration.")
       prevRankGraph.vertices.unpersist(false)
       prevRankGraph.edges.unpersist(false)
