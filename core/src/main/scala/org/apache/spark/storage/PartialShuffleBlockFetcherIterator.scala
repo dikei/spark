@@ -43,8 +43,10 @@ class PartialShuffleBlockFetcherIterator(
     maxBytesInFlight: Long)
   extends Iterator[(BlockId, InputStream)] with Logging{
 
-  private val refreshInterval =
-    SparkEnv.get.conf.getLong("spark.shuffle.mapOutputRefreshInterval", 1000)
+  private val minRefreshInterval =
+    SparkEnv.get.conf.getLong("spark.shuffle.minMapOutputRefreshInterval", 1000)
+  private val maxRefreshInterval =
+    SparkEnv.get.conf.getLong("spark.shuffle.maxMapOutputRefreshInterval", 4000)
 
   private[this] val shuffleMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
 
@@ -91,6 +93,7 @@ class PartialShuffleBlockFetcherIterator(
     var newBlocksAvailable = statusWithIndex.exists {
       case (s, i) => s != null && !readyBlocks.contains(i)
     }
+    var refreshInterval = minRefreshInterval
     while (!newBlocksAvailable) {
       if (firstRead) {
         firstRead = false
@@ -105,6 +108,8 @@ class PartialShuffleBlockFetcherIterator(
         case (s, i) => s != null && !readyBlocks.contains(i)
       }
       shuffleMetrics.incWaitForPartialOutputTime(System.currentTimeMillis() - startWaitTime)
+      // Increase the refresh interval for the next loop
+      refreshInterval = Math.min(refreshInterval * 2, maxRefreshInterval)
     }
 
     val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
