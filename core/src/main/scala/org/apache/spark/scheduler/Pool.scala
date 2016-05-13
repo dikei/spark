@@ -102,7 +102,8 @@ private[spark] class Pool(
     for (schedulable <- sortedSchedulableQueue) {
       sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
     }
-    sortedTaskSetQueue
+    val split = sortedTaskSetQueue.partition(!_.isPreStart)
+    split._1 ++ split._2
   }
 
   def increaseRunningTasks(taskNum: Int) {

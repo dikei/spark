@@ -186,7 +186,8 @@ class DAGScheduler(
 
   private val removeStageBarrier =
     sc.getConf.getBoolean("spark.scheduler.removeStageBarrier", false)
-  private val needToCommitOutputStages = new mutable.HashMap[Stage, mutable.ArrayBuffer[Stage]]()
+  private val hasPrestartDependantStages = new mutable.HashMap[Stage, mutable.ArrayBuffer[Stage]]()
+  private val prestartedStages = new mutable.HashSet[Stage]()
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -1190,7 +1191,7 @@ class DAGScheduler(
             }
 
             // If a dependant stage is started, commit the data of the parent stage
-            if (removeStageBarrier && needToCommitOutputStages.contains(stage)) {
+            if (removeStageBarrier && hasPrestartDependantStages.contains(stage)) {
               mapOutputTracker.registerMapOutputs(
                 shuffleStage.shuffleDep.shuffleId,
                 shuffleStage.outputLocInMapOutputTrackerFormat(),
@@ -1238,8 +1239,18 @@ class DAGScheduler(
                 }
               }
 
-              needToCommitOutputStages -= stage
-
+              if (removeStageBarrier) {
+                hasPrestartDependantStages -= stage
+                val dependantStages = mutable.HashSet[Stage]()
+                for (s <- hasPrestartDependantStages.values) {
+                  dependantStages ++= s
+                }
+                // Update the set of pre-started stages
+                prestartedStages.synchronized {
+                  prestartedStages.clear()
+                  prestartedStages ++= dependantStages
+                }
+              }
               // Note: newly runnable stages will be submitted below when we submit waiting stages
             } else if (removeStageBarrier) {
               // Try starting the next stage
@@ -1325,7 +1336,7 @@ class DAGScheduler(
 
   def killPrestartedDependantStages(parentStage: Stage): Unit = {
     log.info("Killing pre-started stages because stage {} fail", parentStage.id)
-    for (stages <- needToCommitOutputStages.get(parentStage)) {
+    for (stages <- hasPrestartDependantStages.get(parentStage)) {
       markFailedStages(stages)
     }
   }
@@ -1341,6 +1352,16 @@ class DAGScheduler(
       }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
     }
     failedStages ++= stages
+  }
+
+  def isPrestartedStage(stageId: Int): Boolean = {
+    if (removeStageBarrier && stageIdToStage.contains(stageId)) {
+      val stage = stageIdToStage(stageId)
+      prestartedStages.synchronized {
+        return prestartedStages.contains(stage)
+      }
+    }
+    false
   }
 
   private[scheduler] def tryStartNextStage(shuffleStage: ShuffleMapStage): Unit = {
@@ -1372,7 +1393,7 @@ class DAGScheduler(
                   shuffleStage.shuffleDep.shuffleId,
                   shuffleStage.outputLocInMapOutputTrackerFormat(),
                   changeEpoch = true)
-                needToCommitOutputStages.getOrElseUpdate(s, new mutable.ArrayBuffer[Stage]()) += stage
+                hasPrestartDependantStages.getOrElseUpdate(s, new mutable.ArrayBuffer[Stage]()) += stage
               }
             case other =>
               log.info("Parent {} of stage {} is not a shuffle map stage", other.id, stage.id)
@@ -1380,6 +1401,9 @@ class DAGScheduler(
 
           // Remove waiting stage and submit all its task
           waitingStages -= stage
+          prestartedStages.synchronized {
+            prestartedStages += stage
+          }
           submitMissingTasks(stage, activeJobForStage(stage).get)
         case None =>
           log.info("No stage can be started")

@@ -912,6 +912,8 @@ private[spark] class TaskSetManager(
     recomputeLocality()
   }
 
+  def isPreStart: Boolean = sched.dagScheduler.isPrestartedStage(stageId)
+
   def kill(): Unit = {
     isZombie = true
     runningTasksSet.clear()
