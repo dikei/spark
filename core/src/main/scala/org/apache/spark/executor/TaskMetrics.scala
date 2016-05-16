@@ -416,12 +416,12 @@ class ShuffleReadMetrics extends Serializable {
   private[spark] def incInitialReadTime(value: Long) = _initialReadTime += value
   private[spark] def decInitialReadTime(value: Long) = _initialReadTime -= value
 
-  private var _waitForParentPeriods: scala.collection.mutable.ArrayBuffer[(String, Long, Long)] =
-    ArrayBuffer[(String, Long, Long)]()
-  def waitForParentPeriods: ArrayBuffer[(String, Long, Long)] = _waitForParentPeriods
-  private[spark] def mergeWaitForParentPeriods(other: ArrayBuffer[(String, Long, Long)]) =
+  private var _waitForParentPeriods: scala.collection.mutable.ArrayBuffer[(Long, Long)] =
+    ArrayBuffer[(Long, Long)]()
+  def waitForParentPeriods: ArrayBuffer[(Long, Long)] = _waitForParentPeriods
+  private[spark] def mergeWaitForParentPeriods(other: ArrayBuffer[(Long, Long)]) =
     _waitForParentPeriods ++= other
-  private[spark] def addWaitForParentPeriod(period: (String, Long, Long)) = _waitForParentPeriods += period
+  private[spark] def addWaitForParentPeriod(period: (Long, Long)) = _waitForParentPeriods += period
 }
 
 /**

@@ -110,7 +110,7 @@ class PartialShuffleBlockFetcherIterator(
       val duration = System.currentTimeMillis() - startWaitTime
       shuffleMetrics.incWaitForPartialOutputTime(duration)
       // Store the period that tasks wait for parent's output
-      shuffleMetrics.addWaitForParentPeriod((context.taskMetrics().hostname, startWaitTime, duration))
+      shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
       // Increase the refresh interval for the next loop
       refreshInterval = Math.min(refreshInterval * 2, maxRefreshInterval)
     }
