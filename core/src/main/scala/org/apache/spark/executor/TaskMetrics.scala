@@ -208,6 +208,7 @@ class TaskMetrics extends Serializable {
         merged.incRecordsRead(depMetrics.recordsRead)
         merged.incWaitForPartialOutputTime(depMetrics.waitForPartialOutputTime)
         merged.incInitialReadTime(depMetrics.initialReadTime)
+        merged.mergeWaitForParentPeriods(depMetrics.waitForParentPeriods)
       }
       _shuffleReadMetrics = Some(merged)
     }
@@ -414,6 +415,13 @@ class ShuffleReadMetrics extends Serializable {
   def initialReadTime: Long = _initialReadTime
   private[spark] def incInitialReadTime(value: Long) = _initialReadTime += value
   private[spark] def decInitialReadTime(value: Long) = _initialReadTime -= value
+
+  private var _waitForParentPeriods: scala.collection.mutable.ArrayBuffer[(String, Long, Long)] =
+    ArrayBuffer[(String, Long, Long)]()
+  def waitForParentPeriods: ArrayBuffer[(String, Long, Long)] = _waitForParentPeriods
+  private[spark] def mergeWaitForParentPeriods(other: ArrayBuffer[(String, Long, Long)]) =
+    _waitForParentPeriods ++= other
+  private[spark] def addWaitForParentPeriod(period: (String, Long, Long)) = _waitForParentPeriods += period
 }
 
 /**
