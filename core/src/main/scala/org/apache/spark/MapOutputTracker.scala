@@ -446,6 +446,23 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     None
   }
 
+  def getMapOutputSizeForShuffle(shuffleId: Int, reducerId: Int): Long = {
+    if (mapStatuses.contains(shuffleId)) {
+      val statuses = mapStatuses(shuffleId)
+      var size = 0L
+      var mapIdx = 0
+      while (mapIdx < statuses.length) {
+        val status = statuses(mapIdx)
+        if (status != null)
+          size += status.getSizeForBlock(reducerId)
+        mapIdx += 1
+      }
+      size
+    } else {
+      0L
+    }
+  }
+
   def incrementEpoch() {
     epochLock.synchronized {
       epoch += 1
