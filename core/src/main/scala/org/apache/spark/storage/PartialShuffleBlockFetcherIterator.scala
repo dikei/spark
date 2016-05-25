@@ -78,6 +78,8 @@ class PartialShuffleBlockFetcherIterator(
     * Refresh the block fetcher. Block until we have new block or there is nothing to read
     */
   private def refreshBlockFetcher(): Unit = {
+    val startWaitTime = System.currentTimeMillis()
+    // This will block until we have something new to return
     val out = mapOutputTracker.getUpdatedStatus(shuffleId, fetchEpoch)
     fetchEpoch = out._2
     val statuses = out._1.synchronized {
@@ -85,20 +87,18 @@ class PartialShuffleBlockFetcherIterator(
     }
     var statusWithIndex = statuses.zipWithIndex
 
+    statusWithIndex = statuses.zipWithIndex
     if (firstRead) {
       firstRead = false
       shuffleMetrics.incInitialReadTime(System.currentTimeMillis() - initTime)
+    } else {
+      // Calculate the time that we wait
+      val duration = System.currentTimeMillis() - startWaitTime
+      log.info("Waiting {} ms for new block to be available", duration)
+      shuffleMetrics.incWaitForPartialOutputTime(duration)
+      // Store the period that tasks wait for parent's output
+      shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
     }
-
-    val startWaitTime = System.currentTimeMillis()
-    // This will block until we have something new to return
-    statusWithIndex = statuses.zipWithIndex
-    // Calculate the time that we wait
-    val duration = System.currentTimeMillis() - startWaitTime
-    log.info("Waiting {} ms for new block to be available", duration)
-    shuffleMetrics.incWaitForPartialOutputTime(duration)
-    // Store the period that tasks wait for parent's output
-    shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
 
     val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
     statusWithIndex.foreach { case (status, mapId) =>

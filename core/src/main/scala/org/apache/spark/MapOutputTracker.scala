@@ -64,7 +64,9 @@ private[spark] class MapOutputTrackerMasterEndpoint(
         context.reply(mapOutputStatuses)
       }
     case GetCompletedStatusCount(shuffleId: Int) =>
-      context.reply(tracker.getCompletedStatusCount(shuffleId))
+      val statusCount = tracker.getCompletedStatusCount(shuffleId)
+      log.info("Shuffle {} has completed {} partition", shuffleId, statusCount)
+      context.reply(statusCount)
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
       context.reply(true)
@@ -326,7 +328,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   private class MapStatusUpdater(shuffleId: Int) extends Runnable with Logging {
 
     override def run(): Unit = {
-      log.info("Map Status Updater started")
+      log.info("Map status updater for shuffle {} started", shuffleId)
       val minInterval = 1000
       val maxInterval = 3000
 
@@ -361,6 +363,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         partialEpoch.remove(shuffleId)
         partialEpoch.notifyAll()
       }
+      log.info("Map status updater for shuffle {} stopped", shuffleId)
     }
   }
 }
