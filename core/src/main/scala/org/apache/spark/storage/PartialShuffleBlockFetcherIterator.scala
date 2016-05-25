@@ -43,9 +43,6 @@ class PartialShuffleBlockFetcherIterator(
     maxBytesInFlight: Long)
   extends Iterator[(BlockId, InputStream)] with Logging{
 
-  private val minRefreshInterval =
-    SparkEnv.get.conf.getLong("spark.shuffle.minMapOutputRefreshInterval", 1000)
-
   private[this] val shuffleMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
 
   private val initTime = System.currentTimeMillis()
@@ -56,6 +53,8 @@ class PartialShuffleBlockFetcherIterator(
   private var blockFetcherIter: ShuffleBlockFetcherIterator = null
 
   private var finished: Boolean = false
+
+  private var fetchEpoch = 0
 
   // Initialize the block fetcher
   refreshBlockFetcher()
@@ -79,38 +78,27 @@ class PartialShuffleBlockFetcherIterator(
     * Refresh the block fetcher. Block until we have new block or there is nothing to read
     */
   private def refreshBlockFetcher(): Unit = {
-    def statuses: Array[MapStatus] = {
-      val out = mapOutputTracker.getStatuses(shuffleId)
-      // Copy the array map status array
-      out.synchronized {
-        Array[MapStatus]() ++ out
-      }
+    val out = mapOutputTracker.getUpdatedStatus(shuffleId, fetchEpoch)
+    fetchEpoch = out._2
+    val statuses = out._1.synchronized {
+      Array[MapStatus]() ++ out._1
+    }
+    var statusWithIndex = statuses.zipWithIndex
+
+    if (firstRead) {
+      firstRead = false
+      shuffleMetrics.incInitialReadTime(System.currentTimeMillis() - initTime)
     }
 
-    var statusWithIndex = statuses.zipWithIndex
-    var newBlocksAvailable = statusWithIndex.exists {
-      case (s, i) => s != null && !readyBlocks.contains(i)
-    }
-    val refreshInterval = minRefreshInterval
-    while (!newBlocksAvailable) {
-      if (firstRead) {
-        firstRead = false
-        shuffleMetrics.incInitialReadTime(System.currentTimeMillis() - initTime)
-      }
-      val startWaitTime = System.currentTimeMillis()
-      // Wait until new block is available
-      log.info("Waiting {} ms for new block to be available", refreshInterval)
-      Thread.sleep(refreshInterval)
-      statusWithIndex = statuses.zipWithIndex
-      newBlocksAvailable = statusWithIndex.exists {
-        case (s, i) => s != null && !readyBlocks.contains(i)
-      }
-      val duration = System.currentTimeMillis() - startWaitTime
-      shuffleMetrics.incWaitForPartialOutputTime(duration)
-      // Store the period that tasks wait for parent's output
-      shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
-      // Increase the refresh interval for the next loop
-    }
+    val startWaitTime = System.currentTimeMillis()
+    // This will block until we have something new to return
+    statusWithIndex = statuses.zipWithIndex
+    // Calculate the time that we wait
+    val duration = System.currentTimeMillis() - startWaitTime
+    log.info("Waiting {} ms for new block to be available", duration)
+    shuffleMetrics.incWaitForPartialOutputTime(duration)
+    // Store the period that tasks wait for parent's output
+    shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
 
     val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
     statusWithIndex.foreach { case (status, mapId) =>

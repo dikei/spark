@@ -18,24 +18,26 @@
 package org.apache.spark
 
 import java.io._
-import java.util.Arrays
+import java.util.{Arrays, Collections}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.reflect.ClassTag
-
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, RpcEndpoint}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
+import scala.collection.mutable
+
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
+private[spark] case class GetCompletedStatusCount(shuffleId: Int) extends MapOutputTrackerMessage
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
@@ -61,7 +63,8 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       } else {
         context.reply(mapOutputStatuses)
       }
-
+    case GetCompletedStatusCount(shuffleId: Int) =>
+      context.reply(tracker.getCompletedStatusCount(shuffleId))
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
       context.reply(true)
@@ -186,12 +189,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     val removeStageBarrier = conf.getBoolean("spark.scheduler.removeStageBarrier", false)
 
     val statuses = mapStatuses.get(shuffleId).orNull
-    if (statuses == null || (removeStageBarrier && statuses.contains(null))) {
-      if (statuses != null) {
-        log.info("Map outputs are incomplete for {}, re-fetching", shuffleId)
-      } else {
-        logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
-      }
+    if (statuses == null) {
       val startTime = System.currentTimeMillis
       var fetchedStatuses: Array[MapStatus] = null
       val shouldFetch = fetching.synchronized {
@@ -204,18 +202,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           }
         }
 
-        val currentTime = System.currentTimeMillis
-        val lastFetch = lastFetchs.getOrElse(shuffleId, 0L)
         // Either while we waited the fetch happened successfully, or
         // someone fetched it in between the get and the fetching.synchronized.
         fetchedStatuses = mapStatuses.get(shuffleId).orNull
-        if (fetchedStatuses == null ||
-          (removeStageBarrier &&
-            fetchedStatuses.contains(null) &&
-            currentTime - lastFetch > 1000)) {
+        if (fetchedStatuses == null) {
           // We have to do the fetch, get others to wait for us.
           fetching += shuffleId
-          lastFetchs += shuffleId -> currentTime
           true
         } else {
           false
@@ -230,6 +222,14 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
           val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
           fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           logInfo("Got the output locations")
+          if (removeStageBarrier) {
+            if (!fetchedStatuses.contains(null)) {
+              partialShuffle.remove(shuffleId)
+            } else if (partialShuffle.add(shuffleId)) {
+              // Start the incremental updater
+              new Thread(new MapStatusUpdater(shuffleId)).start()
+            }
+          }
           mapStatuses.put(shuffleId, fetchedStatuses)
         } finally {
           fetching.synchronized {
@@ -282,6 +282,87 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /** Stop the tracker. */
   def stop() { }
+
+  private val partialEpoch = new mutable.HashMap[Int, Int]()
+  private val partialShuffle = Collections.newSetFromMap[Int](new ConcurrentHashMap[Int, java.lang.Boolean]())
+  private val updaterLock = new ConcurrentHashMap[Int, AnyRef]().asScala
+
+  // Get the copmleted status count
+  def getCompletedStatusCount(shuffleId: Int): Int = {
+    mapStatuses.getOrElse(shuffleId, new Array[MapStatus](0)).count(_ != null)
+  }
+
+  def clearOutdatedMapStatus(shuffleId: Int): Boolean = {
+    if (mapStatuses.contains(shuffleId)) {
+      val masterCompleteness = askTracker[Int](GetCompletedStatusCount(shuffleId))
+      val diff = masterCompleteness - getCompletedStatusCount(shuffleId)
+      if (diff > 0) {
+        logInfo("Master is " + diff + " map statuses ahead of us for shuffle " +
+          shuffleId + ". Clear local cache.")
+        mapStatuses -= shuffleId
+        return true
+      } else {
+        return false
+      }
+    }
+    true
+  }
+
+  def getUpdatedStatus(shuffleId: Int, lastEpoch: Int): (Array[MapStatus], Int) = {
+    partialEpoch.synchronized {
+      if (!partialEpoch.contains(shuffleId)) {
+        return (getStatuses(shuffleId), 0)
+      }
+      if (partialEpoch.get(shuffleId).get <= lastEpoch) {
+        updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {
+          updaterLock(shuffleId).notifyAll()
+        }
+        partialEpoch.wait()
+      }
+      (getStatuses(shuffleId), partialEpoch.getOrElse(shuffleId, 0))
+    }
+  }
+
+  private class MapStatusUpdater(shuffleId: Int) extends Runnable with Logging {
+
+    override def run(): Unit = {
+      log.info("Map Status Updater started")
+      val minInterval = 1000
+      val maxInterval = 3000
+
+      updaterLock.put(shuffleId, new AnyRef)
+      partialEpoch.synchronized {
+        if (!partialEpoch.contains(shuffleId)) {
+          partialEpoch.put(shuffleId, 0)
+        }
+      }
+
+      var lastUpdate = System.currentTimeMillis
+      while (partialShuffle.contains(shuffleId)) {
+        updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {
+          updaterLock(shuffleId).wait(maxInterval)
+        }
+        val interval = System.currentTimeMillis - lastUpdate
+        if (interval < minInterval) {
+          Thread.sleep(minInterval - interval)
+        }
+        lastUpdate = System.currentTimeMillis
+
+        // clear & re-fetch the stored status
+        if (clearOutdatedMapStatus(shuffleId)) {
+          getStatuses(shuffleId)
+          partialEpoch.synchronized {
+            partialEpoch.put(shuffleId, partialEpoch.getOrElse(shuffleId, 0) + 1)
+            partialEpoch.notifyAll()
+          }
+        }
+      }
+      partialEpoch.synchronized {
+        partialEpoch.remove(shuffleId)
+        partialEpoch.notifyAll()
+      }
+    }
+  }
 }
 
 /**
@@ -592,3 +673,4 @@ private[spark] object MapOutputTracker extends Logging {
     splitsByAddress.toSeq
   }
 }
+
