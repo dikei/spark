@@ -949,27 +949,23 @@ private[spark] class TaskSetManager(
     }
   }
 
-  def getResumableTask(executorId: String, totalCoreCount: Int): Option[Long] = {
+  def getResumableTask(executorId: String, executorCoreCount: Int): Option[Long] = {
     // If everything is paused or we have one successful task
     log.info("Taskset: {}, executor id: {}", stageId, executorId)
     log.info("Tasks running: {}, paused: {}", runningTasksSet.size, pausedTasksSetSize)
     log.info("Task successful: {}", tasksSuccessful)
     log.info("Pending task: {}", allPendingTasks.size)
-    if (allPendingTasks.size <= totalCoreCount || tasksSuccessful > 0) {
-      pausedTasksSet.get(executorId) match {
-        case Some(queue) =>
-          if (queue.nonEmpty) {
-            val taskId = queue.dequeue()
-            pausedTasksSetSize -= 1
-            Some(taskId)
-          } else {
-            None
-          }
-        case None =>
+    pausedTasksSet.get(executorId) match {
+      case Some(queue) =>
+        if (queue.size > executorCoreCount || allPendingTasks.isEmpty && queue.nonEmpty) {
+          val taskId = queue.dequeue()
+          pausedTasksSetSize -= 1
+          Some(taskId)
+        } else {
           None
-      }
-    } else {
-      None
+        }
+      case None =>
+        None
     }
   }
 }

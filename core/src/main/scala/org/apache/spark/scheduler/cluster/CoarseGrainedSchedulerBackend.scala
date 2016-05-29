@@ -155,7 +155,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on ${executorId}")
             scheduler.pauseTask(taskId)
-            val tobeResume = scheduler.getResumableTask(executorId, totalCoreCount.get)
+            val tobeResume = scheduler.getResumableTask(executorId, executorInfo.totalCores)
             tobeResume match {
               case Some(tid) =>
                 log.info("Resuming {} ", tid)

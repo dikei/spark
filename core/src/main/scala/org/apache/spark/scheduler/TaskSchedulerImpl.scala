@@ -615,9 +615,9 @@ private[spark] class TaskSchedulerImpl(
     tsm.pause(taskId, taskIdToExecutorId(taskId))
   }
 
-  override def getResumableTask(executorId: String, totalCoreCount: Int): Option[Long] = {
+  override def getResumableTask(executorId: String, executorCoreCount: Int): Option[Long] = {
     for (tsm <- activeTaskSets.toList.sortBy(_.stageId)) {
-      val matched = tsm.getResumableTask(executorId, totalCoreCount)
+      val matched = tsm.getResumableTask(executorId, executorCoreCount)
       if (matched.isDefined) {
         return matched
       }
