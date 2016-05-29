@@ -56,6 +56,8 @@ class PartialShuffleBlockFetcherIterator(
 
   private var fetchEpoch = 0
 
+  private var reOffered = false
+
   // Initialize the block fetcher
   refreshBlockFetcher()
 
@@ -64,6 +66,11 @@ class PartialShuffleBlockFetcherIterator(
       blockFetcherIter.hasNext
     } else {
       if (!blockFetcherIter.hasNext) {
+        if (!reOffered) {
+          log.info("Task {} paused. Re-offer CPU to run other tasks", context.taskAttemptId())
+          reOffered = true
+          context.executorBackend().reOffer(context.taskAttemptId())
+        }
         refreshBlockFetcher()
       }
       blockFetcherIter.hasNext
@@ -111,6 +118,7 @@ class PartialShuffleBlockFetcherIterator(
       }
     }
     log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
+    log.info("Task {} has {} blocks ready", context.taskAttemptId(), readyBlocks.size)
 
     if (readyBlocks.size == statuses.length) {
       finished = true

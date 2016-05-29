@@ -21,10 +21,9 @@ import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
-
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.{Accumulator, SparkEnv, TaskContext, TaskContextImpl}
+import org.apache.spark.executor.{ExecutorBackend, TaskMetrics}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.ByteBufferInputStream
@@ -68,7 +67,8 @@ private[spark] abstract class Task[T](
   final def run(
     taskAttemptId: Long,
     attemptNumber: Int,
-    metricsSystem: MetricsSystem)
+    metricsSystem: MetricsSystem,
+    executorBackend: ExecutorBackend)
   : (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
       stageId,
@@ -80,6 +80,7 @@ private[spark] abstract class Task[T](
       internalAccumulators,
       runningLocally = false)
     TaskContext.setTaskContext(context)
+    context.setExecutorBackend(executorBackend)
     context.taskMetrics.setHostname(Utils.localHostName())
     context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()

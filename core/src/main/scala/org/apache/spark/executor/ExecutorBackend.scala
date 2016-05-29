@@ -26,5 +26,7 @@ import org.apache.spark.TaskState.TaskState
  */
 private[spark] trait ExecutorBackend {
   def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer)
+
+  def reOffer(taskId: Long): Unit = {}
 }
 

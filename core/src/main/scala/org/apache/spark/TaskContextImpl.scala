@@ -18,8 +18,7 @@
 package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
-
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorBackend, TaskMetrics}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -147,4 +146,8 @@ private[spark] class TaskContextImpl(
     internalAccumulators.foreach(registerAccumulator)
     internalAccumulators.map { a => (a.name.get, a) }.toMap
   }
+
+  private var _executorBackend: ExecutorBackend = _
+  def setExecutorBackend(backend: ExecutorBackend) = _executorBackend = backend
+  override def executorBackend(): ExecutorBackend = _executorBackend
 }

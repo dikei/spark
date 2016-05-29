@@ -59,6 +59,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   private val executorDataMap = new HashMap[String, ExecutorData]
 
+  // Store the reoffered task so we don't free their resources twice
+  private val reOffered = new HashSet[Long]
+
   // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
 
@@ -104,13 +107,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
     }
 
+    private val removeStageBarrier = conf.getBoolean("spark.scheduler.removeStageBarrier", false)
+
     override def receive: PartialFunction[Any, Unit] = {
       case StatusUpdate(executorId, taskId, state, data) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              if (removeStageBarrier && reOffered.contains(taskId)) {
+                reOffered -= taskId
+              } else {
+                executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              }
               makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
@@ -129,6 +138,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case None =>
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
+        }
+
+      case ReOffer(executorId, taskId) =>
+        executorDataMap.get(executorId) match {
+          case Some(executorInfo) =>
+            logInfo(s"Task $taskId re-offer resources on ${executorId}")
+            reOffered += taskId
+            executorInfo.freeCores += scheduler.CPUS_PER_TASK
+            makeOffers(executorId)
+          case None =>
+            // Ignoring the update since we don't know about the executor.
+            logWarning(s"Ignored reoffer request from unknown executor with ID $executorId")
         }
     }
 

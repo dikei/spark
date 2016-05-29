@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.Serializable
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorBackend, TaskMetrics}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.util.{TaskCompletionListener, TaskFailureListener}
@@ -216,4 +216,6 @@ abstract class TaskContext extends Serializable {
    * Accumulators for tracking internal metrics indexed by the name.
    */
   private[spark] val internalMetricsToAccumulators: Map[String, Accumulator[Long]]
+
+  def executorBackend(): ExecutorBackend
 }

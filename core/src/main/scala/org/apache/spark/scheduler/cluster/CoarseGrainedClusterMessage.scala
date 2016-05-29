@@ -64,6 +64,8 @@ private[spark] object CoarseGrainedClusterMessages {
     }
   }
 
+  case class ReOffer(executorId: String, taskId: Long) extends CoarseGrainedClusterMessage
+
   // Internal messages in driver
   case object ReviveOffers extends CoarseGrainedClusterMessage
 
