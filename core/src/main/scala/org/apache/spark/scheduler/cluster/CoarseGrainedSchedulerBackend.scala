@@ -118,7 +118,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                   executorInfo.freeCores += scheduler.CPUS_PER_TASK
                 }
                 // Check if we can resume some of the task, then do it
-                val tobeResume = scheduler.getResumableTask(executorId)
+                val tobeResume = scheduler.getResumableTask(executorId, executorInfo.totalCores)
                 tobeResume match {
                   case Some(tid) =>
                     log.info("Resuming {} ", tid)
@@ -155,7 +155,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on ${executorId}")
             scheduler.pauseTask(taskId)
-            val tobeResume = scheduler.getResumableTask(executorId)
+            val tobeResume = scheduler.getResumableTask(executorId, totalCoreCount.get)
             tobeResume match {
               case Some(tid) =>
                 log.info("Resuming {} ", tid)

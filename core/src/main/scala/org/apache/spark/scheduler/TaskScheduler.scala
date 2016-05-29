@@ -93,5 +93,5 @@ private[spark] trait TaskScheduler {
 
   def pauseTask(taskId: Long): Unit = {}
 
-  def getResumableTask(executorId: String): Option[Long] = None
+  def getResumableTask(executorId: String, executorCore: Int): Option[Long] = None
 }
