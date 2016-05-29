@@ -25,16 +25,14 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-import scala.collection.mutable.Queue
-import scala.math.{max, min}
+import scala.math.{min, max}
 import scala.util.control.NonFatal
+
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{Clock, SystemClock, Utils}
-
-import scala.collection.mutable
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -99,9 +97,6 @@ private[spark] class TaskSetManager(
   var parent: Pool = null
   var totalResultSize = 0L
   var calculatedTasks = 0
-
-  val pausedTasksSet = new HashMap[String, Queue[Long]]
-  var pausedTasksSetSize = 0
 
   val runningTasksSet = new HashSet[Long]
 
@@ -933,40 +928,6 @@ private[spark] class TaskSetManager(
     isZombie = true
     runningTasksSet.clear()
     maybeFinishTaskSet()
-  }
-
-  def pause(taskId: Long, executorId: String): Unit = {
-    pausedTasksSet.getOrElseUpdate(executorId, new Queue[Long]) += taskId
-    pausedTasksSetSize += 1
-  }
-
-  def isPaused(taskId: Long, executorId: String): Boolean = {
-    pausedTasksSet.get(executorId) match {
-      case Some(a) =>
-        a.contains(taskId)
-      case _ =>
-        false
-    }
-  }
-
-  def getResumableTask(executorId: String, executorCoreCount: Int): Option[Long] = {
-    // If everything is paused or we have one successful task
-    log.info("Taskset: {}, executor id: {}", stageId, executorId)
-    log.info("Tasks running: {}, paused: {}", runningTasksSet.size, pausedTasksSetSize)
-    log.info("Task successful: {}", tasksSuccessful)
-    log.info("Pending task: {}", allPendingTasks.size)
-    pausedTasksSet.get(executorId) match {
-      case Some(queue) =>
-        if (queue.size > executorCoreCount || allPendingTasks.isEmpty && queue.nonEmpty) {
-          val taskId = queue.dequeue()
-          pausedTasksSetSize -= 1
-          Some(taskId)
-        } else {
-          None
-        }
-      case None =>
-        None
-    }
   }
 }
 

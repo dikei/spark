@@ -115,14 +115,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       executor.stop()
       stop()
       rpcEnv.shutdown()
-
-    case ResumeTask(taskId) =>
-      if (executor == null) {
-        logError("Received KillTask command but executor was null")
-        System.exit(1)
-      } else {
-        executor.resume(taskId)
-      }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

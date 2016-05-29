@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{CountDownLatch, CyclicBarrier, Phaser}
-
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import org.apache.spark.executor.{ExecutorBackend, TaskMetrics}
 import org.apache.spark.memory.TaskMemoryManager
@@ -152,8 +150,4 @@ private[spark] class TaskContextImpl(
   private var _executorBackend: ExecutorBackend = _
   def setExecutorBackend(backend: ExecutorBackend) = _executorBackend = backend
   override def executorBackend(): ExecutorBackend = _executorBackend
-
-  private var _partialWaiter: Phaser = _
-  def setPartialWaiter(waiter: Phaser) = _partialWaiter = waiter
-  override def partialWaiter(): Phaser = _partialWaiter
 }

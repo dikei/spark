@@ -44,8 +44,6 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
     with RegisterExecutorResponse
 
-  case class ResumeTask(taskId: Long) extends CoarseGrainedClusterMessage
-
   // Executors to driver
   case class RegisterExecutor(
       executorId: String,

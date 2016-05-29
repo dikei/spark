@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
-import java.util.concurrent.{CountDownLatch, CyclicBarrier, Phaser}
 
 import scala.collection.mutable.HashMap
 import org.apache.spark.metrics.MetricsSystem
@@ -69,8 +68,7 @@ private[spark] abstract class Task[T](
     taskAttemptId: Long,
     attemptNumber: Int,
     metricsSystem: MetricsSystem,
-    executorBackend: ExecutorBackend,
-    partialWaiter: Phaser)
+    executorBackend: ExecutorBackend)
   : (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
       stageId,
@@ -83,7 +81,6 @@ private[spark] abstract class Task[T](
       runningLocally = false)
     TaskContext.setTaskContext(context)
     context.setExecutorBackend(executorBackend)
-    context.setPartialWaiter(partialWaiter)
     context.taskMetrics.setHostname(Utils.localHostName())
     context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()

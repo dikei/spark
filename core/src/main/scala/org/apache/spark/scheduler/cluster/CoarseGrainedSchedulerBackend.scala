@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.rpc._
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
@@ -58,6 +58,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   val createTime = System.currentTimeMillis()
 
   private val executorDataMap = new HashMap[String, ExecutorData]
+
+  // Store the reoffered task so we don't free their resources twice
+  private val reOffered = new HashSet[Long]
 
   // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
@@ -112,25 +115,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              if (removeStageBarrier) {
-                if (!scheduler.isPaused(taskId)) {
-                  // This is not a paused task, don't re-release cpu
-                  executorInfo.freeCores += scheduler.CPUS_PER_TASK
-                }
-                // Check if we can resume some of the task, then do it
-                val tobeResume = scheduler.getResumableTask(executorId, executorInfo.totalCores)
-                tobeResume match {
-                  case Some(tid) =>
-                    log.info("Resuming {} ", tid)
-                    executorInfo.executorEndpoint.send(ResumeTask(tid))
-                  case None =>
-                    log.info("No task is resumable")
-                    makeOffers(executorId)
-                }
+              if (removeStageBarrier && reOffered.contains(taskId)) {
+                reOffered -= taskId
               } else {
                 executorInfo.freeCores += scheduler.CPUS_PER_TASK
-                makeOffers(executorId)
               }
+              makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
               logWarning(s"Ignored task status update ($taskId state $state) " +
@@ -154,17 +144,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on ${executorId}")
-            scheduler.pauseTask(taskId)
-            val tobeResume = scheduler.getResumableTask(executorId, executorInfo.totalCores)
-            tobeResume match {
-              case Some(tid) =>
-                log.info("Resuming {} ", tid)
-                executorInfo.executorEndpoint.send(ResumeTask(tid))
-              case None =>
-                log.info("No task is resumable")
-                executorInfo.freeCores += scheduler.CPUS_PER_TASK
-                makeOffers(executorId)
-            }
+            reOffered += taskId
+            executorInfo.freeCores += scheduler.CPUS_PER_TASK
+            makeOffers(executorId)
           case None =>
             // Ignoring the update since we don't know about the executor.
             logWarning(s"Ignored reoffer request from unknown executor with ID $executorId")

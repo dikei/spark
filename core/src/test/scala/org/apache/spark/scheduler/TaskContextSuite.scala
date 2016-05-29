@@ -60,7 +60,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val task = new ResultTask[String, String](
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, Seq.empty)
     intercept[RuntimeException] {
-      task.run(0, 0, null, null, null)
+      task.run(0, 0, null, null)
     }
     assert(TaskContextSuite.completed === true)
   }
@@ -81,7 +81,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val task = new ResultTask[String, String](
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, Seq.empty)
     intercept[RuntimeException] {
-      task.run(0, 0, null, null, null)
+      task.run(0, 0, null, null)
     }
     assert(TaskContextSuite.lastError.getMessage == "damn error")
   }
