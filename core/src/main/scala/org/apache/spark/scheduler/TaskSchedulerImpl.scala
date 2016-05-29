@@ -76,6 +76,7 @@ private[spark] class TaskSchedulerImpl(
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
+  private val activeTaskSets = new HashSet[TaskSetManager]
 
   private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
   val taskIdToExecutorId = new HashMap[Long, String]
@@ -174,6 +175,7 @@ private[spark] class TaskSchedulerImpl(
           s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
       }
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
+      activeTaskSets += manager
 
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
@@ -215,6 +217,7 @@ private[spark] class TaskSchedulerImpl(
           backend.killTask(tid, execId, interruptThread)
         }
         tsm.abort("Stage %s cancelled".format(stageId))
+        activeTaskSets -= tsm
         logInfo("Stage %d was cancelled".format(stageId))
       }
     }
@@ -233,6 +236,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     manager.parent.removeSchedulable(manager)
+    activeTaskSets -= manager
     logInfo("Removed TaskSet %s, whose tasks have all completed, from pool %s"
       .format(manager.taskSet.id, manager.parent.name))
   }
@@ -603,6 +607,29 @@ private[spark] class TaskSchedulerImpl(
         backend.killTask(taskId, executorId, interruptThread = false)
       }
       tsm.kill
+    }
+  }
+
+  override def pauseTask(taskId: Long): Unit = {
+    val tsm = taskIdToTaskSetManager(taskId)
+    tsm.pause(taskId, taskIdToExecutorId(taskId))
+  }
+
+  override def getResumableTask(executorId: String): Option[Long] = {
+    for (tsm <- activeTaskSets) {
+      val matched = tsm.getResumableTask(executorId)
+      if (matched.isDefined) {
+        return matched
+      }
+    }
+    None
+  }
+
+  def isPaused(taskId: Long): Boolean = {
+    taskIdToTaskSetManager.get(taskId) match {
+      case Some(tsm) =>
+        tsm.isPaused(taskId, taskIdToExecutorId(taskId))
+      case _ => false
     }
   }
 }

@@ -58,6 +58,10 @@ class PartialShuffleBlockFetcherIterator(
 
   private var reOffered = false
 
+  // Register the phaser
+  private val waiter = context.partialWaiter()
+  waiter.register()
+
   // Initialize the block fetcher
   refreshBlockFetcher()
 
@@ -67,9 +71,13 @@ class PartialShuffleBlockFetcherIterator(
     } else {
       if (!blockFetcherIter.hasNext) {
         if (!reOffered) {
-          log.info("Task {} paused. Re-offer CPU to run other tasks", context.taskAttemptId())
           reOffered = true
+          log.info("Task {} paused. Re-offer CPU to run other tasks", context.taskAttemptId())
           context.executorBackend().reOffer(context.taskAttemptId())
+          val waiter = context.partialWaiter()
+          log.info("Phaser registered: {}, arrived: {}", waiter.getRegisteredParties, waiter.getArrivedParties)
+          val ret = waiter.arriveAndAwaitAdvance()
+          log.info("Task {} resumed at phase {}", context.taskAttemptId(), ret)
         }
         refreshBlockFetcher()
       }
@@ -122,6 +130,7 @@ class PartialShuffleBlockFetcherIterator(
 
     if (readyBlocks.size == statuses.length) {
       finished = true
+      waiter.arriveAndDeregister
     }
 
     blockFetcherIter = new ShuffleBlockFetcherIterator(

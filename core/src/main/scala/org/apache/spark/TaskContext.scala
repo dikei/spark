@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.Serializable
+import java.util.concurrent.{CountDownLatch, CyclicBarrier, Phaser}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.{ExecutorBackend, TaskMetrics}
@@ -218,4 +219,6 @@ abstract class TaskContext extends Serializable {
   private[spark] val internalMetricsToAccumulators: Map[String, Accumulator[Long]]
 
   def executorBackend(): ExecutorBackend
+
+  def partialWaiter(): Phaser
 }

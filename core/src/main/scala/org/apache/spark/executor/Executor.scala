@@ -21,12 +21,11 @@ import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
-
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.memory.TaskMemoryManager
@@ -158,6 +157,13 @@ private[spark] class Executor(
     }
   }
 
+  def resume(taskId: Long): Unit = {
+    val tr = runningTasks.get(taskId)
+    if (tr != null) {
+      tr.resume()
+    }
+  }
+
   /** Returns the total amount of time this JVM process has spent in garbage collection. */
   private def computeTotalGcTime(): Long = {
     ManagementFactory.getGarbageCollectorMXBeans.asScala.map(_.getCollectionTime).sum
@@ -182,6 +188,16 @@ private[spark] class Executor(
      * from the driver. Once it is set, it will never be changed.
      */
     @volatile var task: Task[Any] = _
+
+    private val partialWaiter = new Phaser(1)
+
+    def resume(): Unit = {
+      log.info("Trying to resume task {}", taskId)
+      log.info("Phaser registered: {}, arrived: {}",
+        partialWaiter.getRegisteredParties, partialWaiter.getArrivedParties)
+      val ret = partialWaiter.arriveAndDeregister()
+      log.info("Task {} resumed at phase {}", taskId, ret)
+    }
 
     def kill(interruptThread: Boolean): Unit = {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
@@ -228,7 +244,8 @@ private[spark] class Executor(
             taskAttemptId = taskId,
             attemptNumber = attemptNumber,
             metricsSystem = env.metricsSystem,
-            execBackend)
+            execBackend,
+            partialWaiter)
           threwException = false
           res
         } finally {
