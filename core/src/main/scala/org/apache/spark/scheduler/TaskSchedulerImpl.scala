@@ -616,7 +616,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def getResumableTask(executorId: String): Option[Long] = {
-    for (tsm <- activeTaskSets) {
+    for (tsm <- activeTaskSets.toList.sortBy(_.stageId)) {
       val matched = tsm.getResumableTask(executorId)
       if (matched.isDefined) {
         return matched
