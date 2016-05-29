@@ -162,6 +162,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                 executorInfo.executorEndpoint.send(ResumeTask(tid))
               case None =>
                 log.info("No task is resumable")
+                executorInfo.freeCores += scheduler.CPUS_PER_TASK
                 makeOffers(executorId)
             }
           case None =>
