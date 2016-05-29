@@ -954,6 +954,7 @@ private[spark] class TaskSetManager(
     log.info("Taskset: {}, executor id: {}", stageId, executorId)
     log.info("Tasks running: {}, paused: {}", runningTasksSet.size, pausedTasksSetSize)
     log.info("Task successful: {}", tasksSuccessful)
+    log.info("Pending task: {}", allPendingTasks.size)
     if (allPendingTasks.size <= totalCoreCount || tasksSuccessful > 0) {
       pausedTasksSet.get(executorId) match {
         case Some(queue) =>
