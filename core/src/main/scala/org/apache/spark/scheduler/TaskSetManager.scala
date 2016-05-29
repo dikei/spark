@@ -954,7 +954,7 @@ private[spark] class TaskSetManager(
     log.info("Taskset: {}, executor id: {}", stageId, executorId)
     log.info("Tasks running: {}, paused: {}", runningTasksSet.size, pausedTasksSetSize)
     log.info("Task successful: {}", tasksSuccessful)
-    if (pausedTasksSetSize == runningTasksSet.size || tasksSuccessful > 0) {
+    if (allPendingTasks.isEmpty || pausedTasksSetSize == runningTasksSet.size || tasksSuccessful > 0) {
       pausedTasksSet.get(executorId) match {
         case Some(queue) =>
           if (queue.nonEmpty) {
