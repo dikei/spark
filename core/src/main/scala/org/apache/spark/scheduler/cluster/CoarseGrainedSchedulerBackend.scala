@@ -144,9 +144,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on ${executorId}")
-            reOffered += taskId
-            executorInfo.freeCores += scheduler.CPUS_PER_TASK
-            makeOffers(executorId)
+            if (reOffered.size < executorDataMap.size) {
+              reOffered += taskId
+              executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              makeOffers(executorId)
+            } else {
+              logInfo(s"Already have ${reOffered.size} re-offered. Not freeing CPU")
+            }
           case None =>
             // Ignoring the update since we don't know about the executor.
             logWarning(s"Ignored reoffer request from unknown executor with ID $executorId")
