@@ -144,7 +144,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on ${executorId}")
-            if (reOffered.size < executorDataMap.size) {
+            if (reOffered.size * scheduler.CPUS_PER_TASK < totalCoreCount.get) {
               reOffered += taskId
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               makeOffers(executorId)
