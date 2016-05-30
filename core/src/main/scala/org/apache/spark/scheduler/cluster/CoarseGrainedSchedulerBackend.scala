@@ -60,7 +60,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val executorDataMap = new HashMap[String, ExecutorData]
 
   // Store the reoffered task so we don't free their resources twice
-  private val reOffered = new HashSet[Long]
+  private val reOffered = new HashMap[String, HashSet[Long]]
 
   // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
@@ -116,8 +116,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              if (removeStageBarrier && reOffered.contains(taskId)) {
-                reOffered -= taskId
+              val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new HashSet[Long])
+              if (removeStageBarrier && reOfferedForExecutor.contains(taskId)) {
+                reOfferedForExecutor -= taskId
               } else {
                 executorInfo.freeCores += scheduler.CPUS_PER_TASK
               }
@@ -144,13 +145,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case ReOffer(executorId, taskId) =>
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
-            logInfo(s"Task $taskId re-offer resources on ${executorId}")
-            if (reOffered.size * scheduler.CPUS_PER_TASK < reOfferRatio * totalCoreCount.get) {
-              reOffered += taskId
+            logInfo(s"Task $taskId re-offer resources on $executorId")
+            val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new HashSet[Long])
+            if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
+              reOfferedForExecutor += taskId
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               makeOffers(executorId)
             } else {
-              logInfo(s"Already have ${reOffered.size} re-offered. Not freeing CPU")
+              logInfo(s"Executor $executorId has already had ${reOfferedForExecutor.size} re-offered.")
             }
           case None =>
             // Ignoring the update since we don't know about the executor.
