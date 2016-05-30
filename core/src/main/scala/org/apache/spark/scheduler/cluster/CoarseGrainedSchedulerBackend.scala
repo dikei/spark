@@ -108,6 +108,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     private val removeStageBarrier = conf.getBoolean("spark.scheduler.removeStageBarrier", false)
+    private val reOfferRatio = conf.getDouble("spark.scheduler.reOfferRatio", 1.0)
 
     override def receive: PartialFunction[Any, Unit] = {
       case StatusUpdate(executorId, taskId, state, data) =>
@@ -144,7 +145,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on ${executorId}")
-            if (reOffered.size * scheduler.CPUS_PER_TASK < totalCoreCount.get) {
+            if (reOffered.size * scheduler.CPUS_PER_TASK < reOfferRatio * totalCoreCount.get) {
               reOffered += taskId
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               makeOffers(executorId)
