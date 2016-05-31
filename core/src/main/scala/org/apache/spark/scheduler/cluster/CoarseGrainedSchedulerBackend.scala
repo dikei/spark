@@ -147,6 +147,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               makeOffers(executorId)
             } else {
+              // Wake up the task immediatelly
+              executorInfo.executorEndpoint.send(ResumeTask(taskId))
               logInfo(s"Executor $executorId has already had ${reOfferedForExecutor.size} re-offered.")
             }
           case None =>
@@ -222,20 +224,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }.toSeq
       launchTasks(scheduler.resourceOffers(workOffers))
       // Try to resume task if there're still resources
-      activeExecutors.foreach { case (executorId, executorData) =>
-        if (executorData.freeCores > 0) {
+      if (removeStageBarrier) {
+        activeExecutors.foreach { case (executorId, executorData) =>
           log.info("Checking paused task to resume on {}", executorId)
-          // No task launched, we will resume a paused task
-          val reOfferedTasks = reOffered.get(executorId)
-          reOfferedTasks match {
-            case Some(queue) =>
-              while (queue.nonEmpty && executorData.freeCores > 0) {
-                val task = queue.dequeue()
-                log.info("Asking {} to resume", task)
-                executorData.freeCores -= scheduler.CPUS_PER_TASK
-                executorData.executorEndpoint.send(ResumeTask(task))
-              }
-            case _ =>
+          if (executorData.freeCores > 0) {
+            // No task launched, we will resume a paused task
+            val reOfferedTasks = reOffered.get(executorId)
+            reOfferedTasks match {
+              case Some(queue) =>
+                while (queue.nonEmpty && executorData.freeCores > 0) {
+                  val task = queue.dequeue()
+                  log.info("Asking {} to resume", task)
+                  executorData.freeCores -= scheduler.CPUS_PER_TASK
+                  executorData.executorEndpoint.send(ResumeTask(task))
+                }
+              case _ =>
+            }
           }
         }
       }
