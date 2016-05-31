@@ -65,7 +65,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
         // Otherwise, we have to load the partition ourselves
         try {
-          logInfo(s"Partition $key not found, computing it")
+          logInfo(s"TaskId: ${context.taskAttemptId()}. Partition $key not found, computing it")
           val computedValues = rdd.computeOrReadCheckpoint(partition, context)
 
           // If the task is running locally, do not persist the result
@@ -79,13 +79,6 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val metrics = context.taskMetrics
           val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
           metrics.updatedBlocks = Some(lastUpdatedBlocks ++ updatedBlocks.toSeq)
-
-          // Unlock as soon as possible
-          loading.synchronized {
-            loading.remove(key)
-            loading.notifyAll()
-          }
-
           new InterruptibleIterator(context, cachedValues)
 
         } finally {
@@ -110,6 +103,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         loading.add(id)
         None
       } else {
+        logInfo(s"TaskId ${TaskContext.get().taskAttemptId()}")
         // Otherwise, wait for another thread to finish and return its result
         logInfo(s"Another thread is loading $id, waiting for it to finish...")
         while (loading.contains(id)) {
