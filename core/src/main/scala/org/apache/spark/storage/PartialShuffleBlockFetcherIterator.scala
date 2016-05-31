@@ -69,14 +69,16 @@ class PartialShuffleBlockFetcherIterator(
       blockFetcherIter.hasNext
     } else {
       if (!blockFetcherIter.hasNext) {
-        if (!reOffered) {
+        // Fetch one last time in case the map output is completed since last fetch
+        refreshBlockFetcher()
+        if (!finished && !reOffered) {
+          // Now we wait, if the
           log.info("Task {} paused. Re-offer CPU to run other tasks", context.taskAttemptId())
           reOffered = true
           context.executorBackend().reOffer(context.taskAttemptId())
           waiter.arriveAndAwaitAdvance()
           log.info("Task {} resumed", context.taskAttemptId())
         }
-        refreshBlockFetcher()
       }
       blockFetcherIter.hasNext
     }
