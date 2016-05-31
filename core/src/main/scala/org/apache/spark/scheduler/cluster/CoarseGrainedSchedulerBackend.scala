@@ -142,7 +142,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on $executorId")
             val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new Queue[Long])
-            if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
+            val maxId = if (reOfferedForExecutor.nonEmpty) reOfferedForExecutor.max else -1
+            if (taskId > maxId &&
+              reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
               reOfferedForExecutor += taskId
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               makeOffers(executorId)
