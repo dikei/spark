@@ -79,6 +79,13 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val metrics = context.taskMetrics
           val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
           metrics.updatedBlocks = Some(lastUpdatedBlocks ++ updatedBlocks.toSeq)
+
+          // Unlock as soon as possible
+          loading.synchronized {
+            loading.remove(key)
+            loading.notifyAll()
+          }
+
           new InterruptibleIterator(context, cachedValues)
 
         } finally {
