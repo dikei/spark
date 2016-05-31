@@ -1411,7 +1411,7 @@ class DAGScheduler(
       var parents: List[Stage] = null
       val candidate = waitingStages.find { stage =>
         parents = getMissingParentStages(stage)
-        parents.forall( p => !waitingStages.contains(p) && !failedStages.contains(p))
+        parents.forall(p => !waitingStages.contains(p) && !failedStages.contains(p) && !prestartedStages.contains(p))
       }
 
       candidate match {
