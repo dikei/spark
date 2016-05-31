@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
 import org.apache.spark.rpc._
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
@@ -60,7 +60,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val executorDataMap = new HashMap[String, ExecutorData]
 
   // Store the reoffered task so we don't free their resources twice
-  private val reOffered = new HashMap[String, HashSet[Long]]
+  private val reOffered = new HashMap[String, Queue[Long]]
 
   // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
@@ -116,12 +116,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new HashSet[Long])
-              if (removeStageBarrier && reOfferedForExecutor.contains(taskId)) {
-                reOfferedForExecutor -= taskId
-              } else {
-                executorInfo.freeCores += scheduler.CPUS_PER_TASK
-              }
+              executorInfo.freeCores += scheduler.CPUS_PER_TASK
               makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
@@ -146,7 +141,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on $executorId")
-            val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new HashSet[Long])
+            val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new Queue[Long])
             if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
               reOfferedForExecutor += taskId
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
@@ -226,6 +221,24 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
       launchTasks(scheduler.resourceOffers(workOffers))
+      // Try to resume task if there're still resources
+      activeExecutors.foreach { case (executorId, executorData) =>
+        if (executorData.freeCores > 0) {
+          log.info("Checking paused task to resume on {}", executorId)
+          // No task launched, we will resume a paused task
+          val reOfferedTasks = reOffered.get(executorId)
+          reOfferedTasks match {
+            case Some(queue) =>
+              while (queue.nonEmpty && executorData.freeCores > 0) {
+                val task = queue.dequeue()
+                log.info("Asking {} to resume", task)
+                executorData.freeCores -= scheduler.CPUS_PER_TASK
+                executorData.executorEndpoint.send(ResumeTask(task))
+              }
+            case _ =>
+          }
+        }
+      }
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -244,6 +257,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val workOffers = Seq(
           new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
         launchTasks(scheduler.resourceOffers(workOffers))
+        // If after launching task we still have free core, then resume an old task
+        if (removeStageBarrier && executorData.freeCores > 0) {
+          log.info("Checking paused task to resume on {}", executorId)
+          // No task launched, we will resume a paused task
+          val reOfferedTasks = reOffered.get(executorId)
+          reOfferedTasks match {
+            case Some(queue) =>
+              while (queue.nonEmpty && executorData.freeCores > 0) {
+                val task = queue.dequeue()
+                log.info("Asking {} to resume", task)
+                executorData.freeCores -= scheduler.CPUS_PER_TASK
+                executorData.executorEndpoint.send(ResumeTask(task))
+              }
+            case _ =>
+          }
+        }
       }
     }
 

@@ -105,6 +105,14 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.killTask(taskId, interruptThread)
       }
 
+    case ResumeTask(taskId) =>
+      if (executor == null) {
+        logError("Received ResumeTask command but executor was null")
+        System.exit(1)
+      } else {
+        executor.resumeTask(taskId)
+      }
+
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
       // Cannot shutdown here because an ack may need to be sent back to the caller. So send
