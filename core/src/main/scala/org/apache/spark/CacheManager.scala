@@ -86,6 +86,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
         } finally {
           loading.synchronized {
+            logInfo(s"Task ${context.taskAttemptId()} release block $id")
             loading.remove(key)
             lockHolders.remove(context.taskAttemptId())
             loading.notifyAll()
@@ -104,6 +105,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     loading.synchronized {
       if (!loading.contains(id)) {
         // If the partition is free, acquire its lock to compute its value
+        logInfo(s"Task ${context.taskAttemptId()} lock block $id")
         loading.add(id)
         lockHolders.add(context.taskAttemptId())
         None
