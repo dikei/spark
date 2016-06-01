@@ -295,28 +295,29 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val serializedTask = ser.serialize(task)
         if (task.paused) {
           log.info("Asking {} to resume", task.taskId)
-          executorDataMap.get(task.executorId).foreach { executorData =>
-            executorData.freeCores -= scheduler.CPUS_PER_TASK
-            executorData.executorEndpoint.send(ResumeTask(task.taskId))
-          }
-        } else if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
-          scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
-            try {
-              var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
-                "spark.akka.frameSize (%d bytes) - reserved (%d bytes). Consider increasing " +
-                "spark.akka.frameSize or using broadcast variables for large values."
-              msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize,
-                AkkaUtils.reservedSizeBytes)
-              taskSetMgr.abort(msg)
-            } catch {
-              case e: Exception => logError("Exception in error callback", e)
-            }
-          }
-        }
-        else {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
-          executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
+          executorData.executorEndpoint.send(ResumeTask(task.taskId))
+        } else {
+          val serializedTask = ser.serialize(task)
+          if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
+            scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
+              try {
+                var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
+                  "spark.akka.frameSize (%d bytes) - reserved (%d bytes). Consider increasing " +
+                  "spark.akka.frameSize or using broadcast variables for large values."
+                msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize,
+                  AkkaUtils.reservedSizeBytes)
+                taskSetMgr.abort(msg)
+              } catch {
+                case e: Exception => logError("Exception in error callback", e)
+              }
+            }
+          } else {
+            val executorData = executorDataMap(task.executorId)
+            executorData.freeCores -= scheduler.CPUS_PER_TASK
+            executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
+          }
         }
       }
     }
