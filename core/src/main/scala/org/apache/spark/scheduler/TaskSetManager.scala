@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
+import scala.collection.mutable.Queue
 import scala.math.{min, max}
 import scala.util.control.NonFatal
 
@@ -99,6 +100,8 @@ private[spark] class TaskSetManager(
   var calculatedTasks = 0
 
   val runningTasksSet = new HashSet[Long]
+
+  val pausedTaskSet = new HashMap[String, Queue[Long]]
 
   override def runningTasks: Int = runningTasksSet.size
 
@@ -495,9 +498,16 @@ private[spark] class TaskSetManager(
 
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
-            taskName, index, serializedTask))
+            taskName, index, serializedTask, false))
         }
         case _ =>
+          pausedTaskSet.get(execId).foreach { queue =>
+            if (queue.nonEmpty) {
+              val taskId = queue.dequeue()
+              val taskName = s"task $taskId in stage ${taskSet.id}"
+              return Some(new TaskDescription(taskId = taskId, attemptNumber = -1, execId, taskName, -1, null, true))
+            }
+          }
       }
     }
     None

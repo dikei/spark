@@ -21,13 +21,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
-
 import org.apache.spark.rpc._
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
-import org.apache.spark.util.{ThreadUtils, SerializableBuffer, AkkaUtils, Utils}
+import org.apache.spark.util.{AkkaUtils, SerializableBuffer, ThreadUtils, Utils}
+
+import scala.collection.mutable
 
 /**
  * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
@@ -145,6 +146,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
               reOfferedForExecutor += taskId
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              scheduler.taskIdToTaskSetManager.get(taskId).foreach { tsm =>
+                tsm.pausedTaskSet.getOrElseUpdate(executorId, new mutable.Queue[Long]()) += taskId
+              }
               makeOffers(executorId)
             } else {
               // Wake up the task immediatelly
@@ -289,7 +293,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         val serializedTask = ser.serialize(task)
-        if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
+        if (task.paused) {
+          log.info("Asking {} to resume", task.taskId)
+          executorDataMap.get(task.executorId).foreach { executorData =>
+            executorData.freeCores -= scheduler.CPUS_PER_TASK
+            executorData.executorEndpoint.send(ResumeTask(task.taskId))
+          }
+        } else if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
           scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
