@@ -61,7 +61,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val executorDataMap = new HashMap[String, ExecutorData]
 
   // Store the reoffered task so we don't free their resources twice
-  private val reOffered = new HashMap[String, Queue[Long]]
+  private val reOffered = new HashMap[String, HashSet[Long]]
 
   // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
@@ -142,7 +142,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on $executorId")
-            val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new Queue[Long])
+            val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new HashSet[Long])
             if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
               reOfferedForExecutor += taskId
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
@@ -258,6 +258,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       for (task <- tasks.flatten) {
         if (task.paused) {
           log.info("Asking {} to resume", task.taskId)
+          reOffered.get(task.executorId).foreach { reOfferedForExecutor =>
+            reOfferedForExecutor -=  task.taskId
+          }
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
           executorData.executorEndpoint.send(ResumeTask(task.taskId))
