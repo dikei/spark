@@ -1409,7 +1409,9 @@ class DAGScheduler(
       // Search the waiting stages for stage that all missing parents are
       // not waiting or failed
       var parents: List[Stage] = null
-      val candidate = waitingStages.find { stage =>
+      val waitingStagesCopy = waitingStages.toArray
+      val candidate = waitingStagesCopy.sortBy(_.firstJobId).find { stage =>
+        log.info("Checking stage {}, first job id: {} ", stage.id, stage.firstJobId)
         parents = getMissingParentStages(stage)
         parents.forall(p => !waitingStages.contains(p) && !failedStages.contains(p) && !prestartedStages.contains(p))
       }
