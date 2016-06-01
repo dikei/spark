@@ -43,6 +43,8 @@ class PartialShuffleBlockFetcherIterator(
     maxBytesInFlight: Long)
   extends Iterator[(BlockId, InputStream)] with Logging{
 
+  private val cacheManager = SparkEnv.get.cacheManager
+
   private[this] val shuffleMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
 
   private val initTime = System.currentTimeMillis()
@@ -71,7 +73,7 @@ class PartialShuffleBlockFetcherIterator(
       if (!blockFetcherIter.hasNext) {
         // Fetch one last time in case the map output is completed since last fetch
         refreshBlockFetcher()
-        if (!finished && !reOffered) {
+        if (!finished && !reOffered && !cacheManager.hasLock(context.taskAttemptId())) {
           // Now we wait, if the
           log.info("Task {} paused. Re-offer CPU to run other tasks", context.taskAttemptId())
           reOffered = true
