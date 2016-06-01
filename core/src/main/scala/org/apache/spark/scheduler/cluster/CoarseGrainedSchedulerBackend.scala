@@ -227,25 +227,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
       launchTasks(scheduler.resourceOffers(workOffers))
-      // Try to resume task if there're still resources
-      if (removeStageBarrier) {
-        activeExecutors.foreach { case (executorId, executorData) =>
-          if (executorData.freeCores > 0) {
-            // No task launched, we will resume a paused task
-            val reOfferedTasks = reOffered.get(executorId)
-            reOfferedTasks match {
-              case Some(queue) =>
-                while (queue.nonEmpty && executorData.freeCores > 0) {
-                  val task = queue.dequeue()
-                  log.info("Asking {} to resume", task)
-                  executorData.freeCores -= scheduler.CPUS_PER_TASK
-                  executorData.executorEndpoint.send(ResumeTask(task))
-                }
-              case _ =>
-            }
-          }
-        }
-      }
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -264,22 +245,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val workOffers = Seq(
           new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
         launchTasks(scheduler.resourceOffers(workOffers))
-        // If after launching task we still have free core, then resume an old task
-        if (removeStageBarrier && executorData.freeCores > 0) {
-          log.info("Checking paused task to resume on {}", executorId)
-          // No task launched, we will resume a paused task
-          val reOfferedTasks = reOffered.get(executorId)
-          reOfferedTasks match {
-            case Some(queue) =>
-              while (queue.nonEmpty && executorData.freeCores > 0) {
-                val task = queue.dequeue()
-                log.info("Asking {} to resume", task)
-                executorData.freeCores -= scheduler.CPUS_PER_TASK
-                executorData.executorEndpoint.send(ResumeTask(task))
-              }
-            case _ =>
-          }
-        }
       }
     }
 
