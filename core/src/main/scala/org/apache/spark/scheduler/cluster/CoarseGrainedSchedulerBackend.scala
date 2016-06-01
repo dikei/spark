@@ -230,7 +230,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Try to resume task if there're still resources
       if (removeStageBarrier) {
         activeExecutors.foreach { case (executorId, executorData) =>
-          log.info("Checking paused task to resume on {}", executorId)
           if (executorData.freeCores > 0) {
             // No task launched, we will resume a paused task
             val reOfferedTasks = reOffered.get(executorId)
@@ -292,7 +291,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        val serializedTask = ser.serialize(task)
         if (task.paused) {
           log.info("Asking {} to resume", task.taskId)
           val executorData = executorDataMap(task.executorId)
