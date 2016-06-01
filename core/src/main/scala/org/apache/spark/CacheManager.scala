@@ -86,7 +86,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
         } finally {
           loading.synchronized {
-            logInfo(s"Task ${context.taskAttemptId()} release block $id")
+            logInfo(s"Task ${context.taskAttemptId()} release block $key")
             loading.remove(key)
             lockHolders.remove(context.taskAttemptId())
             loading.notifyAll()
