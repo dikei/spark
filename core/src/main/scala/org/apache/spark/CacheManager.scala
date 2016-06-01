@@ -70,6 +70,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         try {
           logInfo(s"TaskId: ${context.taskAttemptId()}. Partition $key not found, computing it")
           val computedValues = rdd.computeOrReadCheckpoint(partition, context)
+          logInfo(s"TaskId: ${context.taskAttemptId()} finish computing $key")
 
           // If the task is running locally, do not persist the result
           if (context.isRunningLocally) {
@@ -79,6 +80,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           // Otherwise, cache the values and keep track of any updates in block statuses
           val updatedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
           val cachedValues = putInBlockManager(key, computedValues, storageLevel, updatedBlocks)
+          logInfo(s"TaskId: ${context.taskAttemptId()} finish caching $key")
           val metrics = context.taskMetrics
           val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
           metrics.updatedBlocks = Some(lastUpdatedBlocks ++ updatedBlocks.toSeq)
