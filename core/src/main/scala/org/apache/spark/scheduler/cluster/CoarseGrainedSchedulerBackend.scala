@@ -117,6 +117,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
+              reOffered.get(executorId).foreach { reOfferedForExecutor =>
+                reOfferedForExecutor -= taskId
+              }
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               makeOffers(executorId)
             case None =>
@@ -138,7 +141,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
 
-      case ReOffer(executorId, taskId) =>
+      case ReOffer(executorId, taskId, shared) =>
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on $executorId")
@@ -146,13 +149,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
               reOfferedForExecutor += taskId
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
-              scheduler.taskIdToTaskSetManager.get(taskId).foreach { tsm =>
-                tsm.pausedTaskSet.getOrElseUpdate(executorId, new mutable.Queue[Long]()) += taskId
+              if (!shared) {
+                scheduler.taskIdToTaskSetManager.get(taskId).foreach { tsm =>
+                  tsm.pausedTaskSet.getOrElseUpdate(executorId, new mutable.Queue[Long]()) += taskId
+                }
               }
               makeOffers(executorId)
             } else {
               // Wake up the task immediatelly
-              executorInfo.executorEndpoint.send(ResumeTask(taskId))
+              if (!shared) {
+                executorInfo.executorEndpoint.send(ResumeTask(taskId))
+              }
               logInfo(s"Executor $executorId has already had ${reOfferedForExecutor.size} re-offered.")
             }
           case None =>

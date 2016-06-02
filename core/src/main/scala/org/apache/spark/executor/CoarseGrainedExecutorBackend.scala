@@ -142,8 +142,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
   }
 
-  override def reOffer(taskId: Long): Unit = {
-    val msg = ReOffer(executorId, taskId)
+  override def reOffer(taskId: Long, shared: Boolean): Unit = {
+    val msg = ReOffer(executorId, taskId, shared)
     driver match {
       case Some(driverRef) => driverRef.send(msg)
       case None => logWarning(s"Drop $msg because has not yet connected to driver")

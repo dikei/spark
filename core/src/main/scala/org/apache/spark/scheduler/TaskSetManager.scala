@@ -501,11 +501,13 @@ private[spark] class TaskSetManager(
             taskName, index, serializedTask, false))
         }
         case _ =>
-          pausedTaskSet.get(execId).foreach { queue =>
-            if (queue.nonEmpty) {
-              val taskId = queue.dequeue()
-              val taskName = s"task $taskId in stage ${taskSet.id}"
-              return Some(new TaskDescription(taskId = taskId, attemptNumber = -1, execId, taskName, -1, null, true))
+          if (removeStageBarrier) {
+            pausedTaskSet.get(execId).foreach { queue =>
+              if (queue.nonEmpty) {
+                val taskId = queue.dequeue()
+                val taskName = s"task $taskId in stage ${taskSet.id}"
+                return Some(new TaskDescription(taskId, -1, execId, taskName, -1, null, true))
+              }
             }
           }
       }

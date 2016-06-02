@@ -73,14 +73,19 @@ class PartialShuffleBlockFetcherIterator(
       if (!blockFetcherIter.hasNext) {
         // Fetch one last time in case the map output is completed since last fetch
         refreshBlockFetcher()
-        if (!finished && !reOffered && !cacheManager.hasLock(context.taskAttemptId())) {
+        if (!finished && !reOffered) {
           // If the map output is still incomplete & we haven't paused yet & we don't hold any lock on RDD
           // We want task that keep lock on RDD to run as fast as possible, so we never pause those
-          log.info("Task {} paused. Re-offer CPU to run other tasks", context.taskAttemptId())
           reOffered = true
-          context.executorBackend().reOffer(context.taskAttemptId())
-          waiter.arriveAndAwaitAdvance()
-          log.info("Task {} resumed", context.taskAttemptId())
+          log.info("Task {} has incomplete map output. Try to run other tasks", context.taskAttemptId())
+          if (cacheManager.hasLock(context.taskAttemptId())) {
+            context.executorBackend().reOffer(context.taskAttemptId(), shared = true)
+          } else {
+            log.info("Pausing task {}", context.taskAttemptId())
+            context.executorBackend().reOffer(context.taskAttemptId(), shared = false)
+            waiter.arriveAndAwaitAdvance()
+            log.info("Task {} resumed", context.taskAttemptId())
+          }
         }
       }
       blockFetcherIter.hasNext
