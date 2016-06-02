@@ -419,10 +419,18 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   /** Register multiple map output information for the given shuffle */
-  def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
+  def registerMapOutputs(
+      shuffleId: Int, statuses: Array[MapStatus],
+      changeEpoch: Boolean = false, isPartial: Boolean = false) {
     mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
     if (changeEpoch) {
       incrementEpoch()
+    }
+    if (isPartial) {
+      // Invalidate the cached serialized map output
+      epochLock.synchronized {
+        cachedSerializedStatuses -= shuffleId
+      }
     }
   }
 

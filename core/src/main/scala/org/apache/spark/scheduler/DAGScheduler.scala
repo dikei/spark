@@ -1229,7 +1229,8 @@ class DAGScheduler(
               mapOutputTracker.registerMapOutputs(
                 shuffleStage.shuffleDep.shuffleId,
                 shuffleStage.outputLocInMapOutputTrackerFormat(),
-                changeEpoch = true)
+                changeEpoch = false,
+                isPartial = true)
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
@@ -1428,7 +1429,8 @@ class DAGScheduler(
                 mapOutputTracker.registerMapOutputs(
                   shuffleStage.shuffleDep.shuffleId,
                   shuffleStage.outputLocInMapOutputTrackerFormat(),
-                  changeEpoch = true)
+                  changeEpoch = false,
+                  isPartial = true)
                 hasPrestartDependantStages.getOrElseUpdate(s, new mutable.ArrayBuffer[Stage]()) += stage
               }
             case other =>
