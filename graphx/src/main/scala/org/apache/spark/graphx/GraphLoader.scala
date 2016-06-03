@@ -90,7 +90,7 @@ object GraphLoader extends Logging {
       }
       Iterator((pid, builder.toEdgePartition))
     }.persist(edgeStorageLevel).setName("GraphLoader.edgeListFile - edges (%s)".format(path))
-    edges.foreachPartition(x => {})
+    edges.count()
 
     logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
 
