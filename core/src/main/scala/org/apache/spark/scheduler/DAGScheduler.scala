@@ -1409,42 +1409,45 @@ class DAGScheduler(
       log.info("Free slot available. Try starting next stage")
       // Search the waiting stages for stage that all missing parents are
       // not waiting or failed
-      var parents: List[Stage] = null
       val waitingStagesCopy = waitingStages.toArray
-      val candidate = waitingStagesCopy.sortBy(_.firstJobId).find { stage =>
+      val candidates = waitingStagesCopy.filter { stage =>
         log.info("Checking stage {}, first job id: {} ", stage.id, stage.firstJobId)
-        parents = getMissingParentStages(stage)
+        val parents = getMissingParentStages(stage)
         parents.forall(p => !waitingStages.contains(p) && !failedStages.contains(p) && !prestartedStages.contains(p))
       }
 
-      candidate match {
-        case Some(stage) =>
-          log.info("Starting stage: {}", stage.id)
-
-          parents.foreach {
-            case (s: ShuffleMapStage) =>
-              if (runningStages.contains(s)) {
-                // Register the map output immediately so we have something to read from
-                log.info("Saving map output of {} for {} to read", s.id, stage.id)
-                mapOutputTracker.registerMapOutputs(
-                  shuffleStage.shuffleDep.shuffleId,
-                  shuffleStage.outputLocInMapOutputTrackerFormat(),
-                  changeEpoch = false,
-                  isPartial = true)
-                hasPrestartDependantStages.getOrElseUpdate(s, new mutable.ArrayBuffer[Stage]()) += stage
-              }
-            case other =>
-              log.info("Parent {} of stage {} is not a shuffle map stage", other.id, stage.id)
-          }
-
-          // Remove waiting stage and submit all its task
-          waitingStages -= stage
-          prestartedStages.synchronized {
-            prestartedStages += stage
-          }
-          submitMissingTasks(stage, activeJobForStage(stage).get)
-        case None =>
-          log.info("No stage can be started")
+      if (candidates.nonEmpty) {
+        runningStages.foreach {
+          case (s: ShuffleMapStage) =>
+            log.info("Saving map output of shuffle {} early", s.id)
+            mapOutputTracker.registerMapOutputs(
+              s.shuffleDep.shuffleId,
+              s.outputLocInMapOutputTrackerFormat(),
+              changeEpoch = false,
+              isPartial = true
+            )
+          case _ =>
+        }
+      }
+      candidates.foreach { stage =>
+        log.info("Starting stage: {}", stage.id)
+        val parents = getMissingParentStages(stage)
+        parents.foreach {
+          case (s: ShuffleMapStage) =>
+            if (runningStages.contains(s)) {
+              // Register the map output immediately so we have something to read from
+              log.info("Saving map output of {} for {} to read", s.id, stage.id)
+              hasPrestartDependantStages.getOrElseUpdate(s, new mutable.ArrayBuffer[Stage]()) += stage
+            }
+          case other =>
+            log.info("Parent {} of stage {} is not a shuffle map stage", other.id, stage.id)
+        }
+        // Remove waiting stage and submit all its task
+        waitingStages -= stage
+        prestartedStages.synchronized {
+          prestartedStages += stage
+        }
+        submitMissingTasks(stage, activeJobForStage(stage).get)
       }
     }
   }
