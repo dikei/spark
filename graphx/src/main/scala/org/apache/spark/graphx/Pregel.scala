@@ -152,6 +152,7 @@ object Pregel extends Logging {
       i += 1
     }
 
+    messages.unpersist(false)
     g
   } // end of apply
 
