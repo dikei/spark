@@ -157,7 +157,7 @@ final class ShuffleBlockFetcherIterator(
           if (!isZombie) {
             // Increment the ref count because we need to pass this to a different thread.
             // This needs to be released after use.
-            val savedBlock = blockManager.savePrefetchShuffleData(BlockId(blockId), buf)
+            val savedBlock = blockManager.savePrefetchShuffleData(BlockId("remote_" + blockId), buf)
             shuffleMetrics.incRemoteBytesRead(buf.size)
             shuffleMetrics.incRemoteBlocksFetched(1)
             results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), savedBlock))
