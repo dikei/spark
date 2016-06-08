@@ -157,11 +157,18 @@ final class ShuffleBlockFetcherIterator(
           if (!isZombie) {
             // Increment the ref count because we need to pass this to a different thread.
             // This needs to be released after use.
-            val savedBlock = blockManager.savePrefetchShuffleData(BlockId("remote_" + blockId), buf)
-            shuffleMetrics.incRemoteBytesRead(buf.size)
-            shuffleMetrics.incRemoteBlocksFetched(1)
-            results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), savedBlock))
-            buf.release()
+            try {
+              val savedBlock = blockManager.savePrefetchShuffleData(BlockId("remote_" + blockId), buf)
+              savedBlock.retain()
+              shuffleMetrics.incRemoteBytesRead(buf.size)
+              shuffleMetrics.incRemoteBlocksFetched(1)
+              buf.release()
+              results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), savedBlock))
+            } catch {
+              case e: Exception =>
+                logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+                results.put(new FailureFetchResult(BlockId(blockId), address, e))
+            }
           }
           logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
