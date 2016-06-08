@@ -162,7 +162,6 @@ final class ShuffleBlockFetcherIterator(
               savedBlock.retain()
               shuffleMetrics.incRemoteBytesRead(buf.size)
               shuffleMetrics.incRemoteBlocksFetched(1)
-              buf.release()
               results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), savedBlock))
             } catch {
               case e: Exception =>
