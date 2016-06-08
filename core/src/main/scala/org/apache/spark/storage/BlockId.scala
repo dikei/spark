@@ -60,10 +60,6 @@ case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends Blo
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
-case class RemoteShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
-  override def name: String = "remote_shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
-}
-
 @DeveloperApi
 case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
@@ -107,7 +103,6 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
 @DeveloperApi
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
-  val REMOTE_SHUFFLE = "remote_shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
@@ -134,8 +129,6 @@ object BlockId {
       StreamBlockId(streamId.toInt, uniqueId.toLong)
     case TEST(value) =>
       TestBlockId(value)
-    case REMOTE_SHUFFLE(shuffleId, mapId, reduceId) =>
-      RemoteShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
     case _ =>
       throw new IllegalStateException("Unrecognized BlockId: " + id)
   }

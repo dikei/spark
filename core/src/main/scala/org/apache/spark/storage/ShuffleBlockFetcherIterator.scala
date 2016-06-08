@@ -157,17 +157,10 @@ final class ShuffleBlockFetcherIterator(
           if (!isZombie) {
             // Increment the ref count because we need to pass this to a different thread.
             // This needs to be released after use.
-            try {
-              val savedBlock = blockManager.savePrefetchShuffleData(BlockId("remote_" + blockId), buf)
-              savedBlock.retain()
-              shuffleMetrics.incRemoteBytesRead(buf.size)
-              shuffleMetrics.incRemoteBlocksFetched(1)
-              results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), savedBlock))
-            } catch {
-              case e: Exception =>
-                logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-                results.put(new FailureFetchResult(BlockId(blockId), address, e))
-            }
+            buf.retain()
+            results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), buf))
+            shuffleMetrics.incRemoteBytesRead(buf.size)
+            shuffleMetrics.incRemoteBlocksFetched(1)
           }
           logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
@@ -318,11 +311,8 @@ final class ShuffleBlockFetcherIterator(
 
   private def fetchUpToMaxBytes(): Unit = {
     // Send fetch requests up to maxBytesInFlight
-//    while (fetchRequests.nonEmpty &&
-//      (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
-//      sendRequest(fetchRequests.dequeue())
-//    }
-    while(fetchRequests.nonEmpty) {
+    while (fetchRequests.nonEmpty &&
+      (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
       sendRequest(fetchRequests.dequeue())
     }
   }

@@ -308,11 +308,6 @@ private[spark] class BlockManager(
     }
   }
 
-  def savePrefetchShuffleData(blockId: BlockId, buf: ManagedBuffer): ManagedBuffer = {
-    putBlockData(blockId, buf, StorageLevel.DISK_ONLY)
-    getBlockData(blockId)
-  }
-
   /**
    * Put the block locally, using the given storage level.
    */
