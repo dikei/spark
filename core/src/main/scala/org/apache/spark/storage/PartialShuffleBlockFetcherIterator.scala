@@ -71,8 +71,6 @@ class PartialShuffleBlockFetcherIterator(
       blockFetcherIter.hasNext
     } else {
       if (!blockFetcherIter.hasNext) {
-        // Fetch one last time in case the map output is completed since last fetch
-        refreshBlockFetcher()
         if (!finished && !reOffered) {
           // If the map output is still incomplete & we haven't paused yet & we don't hold any lock on RDD
           // We want task that keep lock on RDD to run as fast as possible, so we never pause those
@@ -88,6 +86,7 @@ class PartialShuffleBlockFetcherIterator(
             log.info("Task {} resumed", context.taskAttemptId())
           }
         }
+        refreshBlockFetcher()
       }
       blockFetcherIter.hasNext
     }
