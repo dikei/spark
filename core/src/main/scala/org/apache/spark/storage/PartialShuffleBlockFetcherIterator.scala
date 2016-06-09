@@ -80,7 +80,7 @@ class PartialShuffleBlockFetcherIterator(
           log.info("Task {} has incomplete map output. Try to run other tasks", context.taskAttemptId())
           if (cacheManager.hasLock(context.taskAttemptId())) {
             log.info("Not pausing task {} because it's holding lock", context.taskAttemptId())
-//            context.executorBackend().reOffer(context.taskAttemptId(), shared = true)
+            context.executorBackend().reOffer(context.taskAttemptId(), shared = true)
           } else {
             log.info("Pausing task {}", context.taskAttemptId())
             context.executorBackend().reOffer(context.taskAttemptId(), shared = false)
