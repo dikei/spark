@@ -117,11 +117,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              reOffered.get(executorId).foreach { reOfferedForExecutor =>
-                reOfferedForExecutor -= taskId
+              reOffered.get(executorId) match {
+                case Some(reOfferedForExecutor) =>
+                  if (reOfferedForExecutor.contains(taskId)) {
+                    reOfferedForExecutor -= taskId
+                  } else {
+                    executorInfo.freeCores += scheduler.CPUS_PER_TASK
+                    makeOffers(executorId)
+                  }
+                case _ =>
+                  executorInfo.freeCores += scheduler.CPUS_PER_TASK
+                  makeOffers(executorId)
               }
-              executorInfo.freeCores += scheduler.CPUS_PER_TASK
-              makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
               logWarning(s"Ignored task status update ($taskId state $state) " +
