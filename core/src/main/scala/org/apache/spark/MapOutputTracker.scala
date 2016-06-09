@@ -66,7 +66,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
     case GetCompletedStatusCount(shuffleId: Int) =>
       val statusCount = tracker.getCompletedStatusCount(shuffleId)
       val hostPort = context.senderAddress.hostPort
-      log.info("Asked to send shuffle {} completeness of to {}: {}", shuffleId, hostPort, statusCount)
+      log.info(s"Asked to send shuffle $shuffleId completeness of to $hostPort: $statusCount")
       context.reply(statusCount)
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
