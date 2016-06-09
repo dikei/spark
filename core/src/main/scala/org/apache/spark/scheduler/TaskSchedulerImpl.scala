@@ -246,7 +246,6 @@ private[spark] class TaskSchedulerImpl(
     var launchedTask = false
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
-      log.info("Executor {} has {}", execId, executorIdToTaskCount(execId))
       val host = shuffledOffers(i).host
       if (availableCpus(i) >= CPUS_PER_TASK) {
         try {
