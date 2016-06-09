@@ -254,8 +254,10 @@ private[spark] class TaskSchedulerImpl(
             val tid = task.taskId
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
-            executorIdToTaskCount(execId) += 1
-            executorsByHost(host) += execId
+            if (!task.paused) {
+              executorIdToTaskCount(execId) += 1
+              executorsByHost(host) += execId
+            }
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
             launchedTask = true
