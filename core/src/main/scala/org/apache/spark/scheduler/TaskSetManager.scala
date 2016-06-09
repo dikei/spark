@@ -449,6 +449,17 @@ private[spark] class TaskSetManager(
         }
       }
 
+      // Prioritise resuming paused task first.
+      if (removeStageBarrier && tasksSuccessful > 0) {
+        pausedTaskSet.get(execId).foreach { queue =>
+          if (queue.nonEmpty) {
+            val taskId = queue.dequeue()
+            val taskName = s"task $taskId in stage ${taskSet.id}"
+            return Some(new TaskDescription(taskId, -1, execId, taskName, -1, null, true))
+          }
+        }
+      }
+
       dequeueTask(execId, host, allowedLocality) match {
         case Some((index, taskLocality, speculative)) => {
           // Found a task; do some bookkeeping and return a task description
