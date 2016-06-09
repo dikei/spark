@@ -61,7 +61,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val executorDataMap = new HashMap[String, ExecutorData]
 
   // Store the reoffered task so we don't free their resources twice
-  private val reOffered = new HashMap[String, HashSet[Long]]
+  private val reOffered = new HashMap[String, HashMap[Long, Boolean]]
 
   // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
@@ -119,12 +119,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             case Some(executorInfo) =>
               reOffered.get(executorId) match {
                 case Some(reOfferedForExecutor) =>
-                  if (reOfferedForExecutor.contains(taskId)) {
-                    reOfferedForExecutor -= taskId
-                  } else {
+                  // If this is not a shared-slot reoffer, reclaim the cpu
+                  if (!reOfferedForExecutor.contains(taskId) || !reOfferedForExecutor(taskId)) {
                     executorInfo.freeCores += scheduler.CPUS_PER_TASK
                     makeOffers(executorId)
                   }
+                  reOfferedForExecutor -= taskId
                 case _ =>
                   executorInfo.freeCores += scheduler.CPUS_PER_TASK
                   makeOffers(executorId)
@@ -152,9 +152,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on $executorId")
-            val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new HashSet[Long])
+            val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new HashMap[Long, Boolean])
             if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
-              reOfferedForExecutor += taskId
+              reOfferedForExecutor += taskId -> shared
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               if (!shared) {
                 scheduler.taskIdToTaskSetManager.get(taskId).foreach { tsm =>
