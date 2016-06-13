@@ -100,50 +100,50 @@ class PartialShuffleBlockFetcherIterator(
     * Refresh the block fetcher. Block until we have new block or there is nothing to read
     */
   private def refreshBlockFetcher(): Unit = {
-    val startWaitTime = System.currentTimeMillis()
-    // This will block until we have something new to return
-    log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, old epoch: $fetchEpoch")
-    val out = mapOutputTracker.getUpdatedStatus(shuffleId, fetchEpoch)
-    fetchEpoch = out._2
-    log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, old epoch: $fetchEpoch")
-    val statuses = out._1.synchronized {
-      Array[MapStatus]() ++ out._1
-    }
-    var statusWithIndex = statuses.zipWithIndex
-
-    statusWithIndex = statuses.zipWithIndex
-    if (firstRead) {
-      firstRead = false
-      shuffleMetrics.incInitialReadTime(System.currentTimeMillis() - initTime)
-    } else {
-      // Calculate the time that we wait
-      val duration = System.currentTimeMillis() - startWaitTime
-      log.info("Waiting {} ms for new block to be available", duration)
-      shuffleMetrics.incWaitForPartialOutputTime(duration)
-      // Store the period that tasks wait for parent's output
-      shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
-    }
-
     val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
-    statusWithIndex.foreach { case (status, mapId) =>
-      if (status != null && !readyBlocks.contains(mapId)) {
-        for (part <- startPartition until endPartition) {
-          splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
-            ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
+
+    while(!finished && splitsByAddress.isEmpty) {
+      val startWaitTime = System.currentTimeMillis()
+      // This will block until we have something new to return
+      log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, old epoch: $fetchEpoch")
+      val out = mapOutputTracker.getUpdatedStatus(shuffleId, fetchEpoch)
+      fetchEpoch = out._2
+      log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, new epoch: $fetchEpoch")
+      val statuses = out._1.synchronized {
+        Array[MapStatus]() ++ out._1
+      }
+      var statusWithIndex = statuses.zipWithIndex
+
+      statusWithIndex = statuses.zipWithIndex
+      if (firstRead) {
+        firstRead = false
+        shuffleMetrics.incInitialReadTime(System.currentTimeMillis() - initTime)
+      } else {
+        // Calculate the time that we wait
+        val duration = System.currentTimeMillis() - startWaitTime
+        log.info("Waiting {} ms for new block to be available", duration)
+        shuffleMetrics.incWaitForPartialOutputTime(duration)
+        // Store the period that tasks wait for parent's output
+        shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
+      }
+
+      statusWithIndex.foreach { case (status, mapId) =>
+        if (status != null && !readyBlocks.contains(mapId)) {
+          for (part <- startPartition until endPartition) {
+            splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
+              ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
+          }
+          readyBlocks += mapId
         }
-        readyBlocks += mapId
+      }
+      log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
+      log.info(s"Task ${context.taskAttemptId()}, Shuffle $shuffleId has ${readyBlocks.size} blocks ready")
+
+      if (readyBlocks.size == statuses.length) {
+        finished = true
+        waiter.arriveAndDeregister()
       }
     }
-    log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
-    log.info(s"Task ${context.taskAttemptId()}, Shuffle $shuffleId has ${readyBlocks.size} blocks ready")
-
-    if (readyBlocks.size == statuses.length) {
-      finished = true
-      waiter.arriveAndDeregister()
-    }
-
-    // Split by address cannot be empty
-    assert(splitsByAddress.nonEmpty)
 
     blockFetcherIter = new ShuffleBlockFetcherIterator(
       context,
