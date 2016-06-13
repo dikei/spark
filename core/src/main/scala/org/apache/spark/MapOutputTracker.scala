@@ -352,9 +352,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         lastUpdate = System.currentTimeMillis
 
         // clear & re-fetch the stored status
+        def completed = getCompletedStatusCount(shuffleId)
+        log.info(s"Shuffle $shuffleId has $completed output")
         if (clearOutdatedMapStatus(shuffleId)) {
-          def completed = getCompletedStatusCount(shuffleId)
-          log.info(s"Shuffle $shuffleId has $completed output")
           getStatuses(shuffleId)
           partialEpoch.synchronized {
             partialEpoch.put(shuffleId, partialEpoch.getOrElse(shuffleId, 0) + 1)
