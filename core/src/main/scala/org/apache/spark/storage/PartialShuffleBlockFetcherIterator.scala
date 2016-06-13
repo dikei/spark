@@ -102,8 +102,10 @@ class PartialShuffleBlockFetcherIterator(
   private def refreshBlockFetcher(): Unit = {
     val startWaitTime = System.currentTimeMillis()
     // This will block until we have something new to return
+    log.info("Task {}, old epoch: {}", context.taskAttemptId(), fetchEpoch)
     val out = mapOutputTracker.getUpdatedStatus(shuffleId, fetchEpoch)
     fetchEpoch = out._2
+    log.info("Task {}, new epoch: {}", context.taskAttemptId(), fetchEpoch)
     val statuses = out._1.synchronized {
       Array[MapStatus]() ++ out._1
     }
