@@ -102,10 +102,10 @@ class PartialShuffleBlockFetcherIterator(
   private def refreshBlockFetcher(): Unit = {
     val startWaitTime = System.currentTimeMillis()
     // This will block until we have something new to return
-    log.info("Task {}, old epoch: {}", context.taskAttemptId(), fetchEpoch)
+    log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, old epoch: $fetchEpoch")
     val out = mapOutputTracker.getUpdatedStatus(shuffleId, fetchEpoch)
     fetchEpoch = out._2
-    log.info("Task {}, new epoch: {}", context.taskAttemptId(), fetchEpoch)
+    log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, old epoch: $fetchEpoch")
     val statuses = out._1.synchronized {
       Array[MapStatus]() ++ out._1
     }
@@ -135,7 +135,7 @@ class PartialShuffleBlockFetcherIterator(
       }
     }
     log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
-    log.info("Task {} has {} blocks ready", context.taskAttemptId(), readyBlocks.size)
+    log.info(s"Task ${context.taskAttemptId()}, Shuffle $shuffleId has ${readyBlocks.size} blocks ready")
 
     if (readyBlocks.size == statuses.length) {
       finished = true
