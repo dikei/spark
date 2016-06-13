@@ -164,19 +164,19 @@ private[spark] class TaskSetManager(
   }
 
   private val removeStageBarrier = conf.getBoolean("spark.scheduler.removeStageBarrier", false)
-  if (removeStageBarrier) {
-    // Sorting task based on the amount of output available
-    val idSets = taskSet.tasks.zipWithIndex.reverse.sortBy(_._1.mapOutputAvail).map(_._2)
-    for (i <- idSets) {
-      addPendingTask(i)
-    }
-  } else {
+//  if (removeStageBarrier) {
+//    // Sorting task based on the amount of output available
+//    val idSets = taskSet.tasks.zipWithIndex.reverse.sortBy(_._1.mapOutputAvail).map(_._2)
+//    for (i <- idSets) {
+//      addPendingTask(i)
+//    }
+//  } else {
     // Add all our tasks to the pending lists. We do this in reverse order
     // of task index so that tasks with low indices get launched first.
     for (i <- (0 until numTasks).reverse) {
       addPendingTask(i)
     }
-  }
+//  }
 
 
   // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
