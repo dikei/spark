@@ -142,6 +142,9 @@ class PartialShuffleBlockFetcherIterator(
       waiter.arriveAndDeregister()
     }
 
+    // Split by address cannot be empty
+    assert(splitsByAddress.nonEmpty)
+
     blockFetcherIter = new ShuffleBlockFetcherIterator(
       context,
       shuffleClient,
