@@ -1414,7 +1414,7 @@ class DAGScheduler(
         log.info("Checking stage {}, first job id: {} ", stage.id, stage.firstJobId)
         val parents = getMissingParentStages(stage)
         parents.forall(p => !waitingStages.contains(p) && !failedStages.contains(p) && !prestartedStages.contains(p))
-      }
+      }.sortBy(_.id)
 
       if (candidates.nonEmpty) {
         runningStages.foreach {
@@ -1436,7 +1436,6 @@ class DAGScheduler(
           case (s: ShuffleMapStage) =>
             if (runningStages.contains(s)) {
               // Register the map output immediately so we have something to read from
-              log.info("Saving map output of {} for {} to read", s.id, stage.id)
               hasPrestartDependantStages.getOrElseUpdate(s, new mutable.ArrayBuffer[Stage]()) += stage
             }
           case other =>
