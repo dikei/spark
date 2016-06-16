@@ -70,7 +70,7 @@ class PartialShuffleBlockFetcherIterator(
     if (finished) {
       blockFetcherIter.hasNext
     } else {
-      if (!blockFetcherIter.hasNext) {
+      while(!finished && !blockFetcherIter.hasNext) {
         if (!reOffered) {
           // If the map output is still incomplete & we haven't paused yet & we don't hold any lock on RDD
           // We want task that keep lock on RDD to run as fast as possible, so we never pause those
@@ -87,11 +87,7 @@ class PartialShuffleBlockFetcherIterator(
           }
         }
         refreshBlockFetcher()
-        
-        // Either the shuffle map stage is complete, or we still have data to process
-        assert(finished || blockFetcherIter.hasNext)
       }
-
       blockFetcherIter.hasNext
     }
   }
@@ -104,56 +100,54 @@ class PartialShuffleBlockFetcherIterator(
     * Refresh the block fetcher. Block until we have new block or there is nothing to read
     */
   private def refreshBlockFetcher(): Unit = {
-    while(!finished && !blockFetcherIter.hasNext) {
-      val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
-      val startWaitTime = System.currentTimeMillis()
-      // This will block until we have something new to return
-      log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, old epoch: $fetchEpoch")
-      val out = mapOutputTracker.getUpdatedStatus(shuffleId, fetchEpoch)
-      fetchEpoch = out._2
-      log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, new epoch: $fetchEpoch")
-      val statuses = out._1.synchronized {
-        Array[MapStatus]() ++ out._1
-      }
-      var statusWithIndex = statuses.zipWithIndex
-
-      statusWithIndex = statuses.zipWithIndex
-      if (firstRead) {
-        firstRead = false
-        shuffleMetrics.incInitialReadTime(System.currentTimeMillis() - initTime)
-      } else {
-        // Calculate the time that we wait
-        val duration = System.currentTimeMillis() - startWaitTime
-        log.info("Waiting {} ms for new block to be available", duration)
-        shuffleMetrics.incWaitForPartialOutputTime(duration)
-        // Store the period that tasks wait for parent's output
-        shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
-      }
-
-      statusWithIndex.foreach { case (status, mapId) =>
-        if (status != null && !readyBlocks.contains(mapId)) {
-          for (part <- startPartition until endPartition) {
-            splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
-              ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
-          }
-          readyBlocks += mapId
-        }
-      }
-      log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
-      log.info(s"Task ${context.taskAttemptId()}, Shuffle $shuffleId has ${readyBlocks.size} blocks ready")
-
-      if (readyBlocks.size == statuses.length) {
-        log.info(s"${readyBlocks.size} blocks ready for shuffle $shuffleId, finishing")
-        finished = true
-        waiter.arriveAndDeregister()
-      }
-
-      blockFetcherIter = new ShuffleBlockFetcherIterator(
-        context,
-        shuffleClient,
-        blockManager,
-        splitsByAddress.toSeq,
-        maxBytesInFlight)
+    val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
+    val startWaitTime = System.currentTimeMillis()
+    // This will block until we have something new to return
+    log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, old epoch: $fetchEpoch")
+    val out = mapOutputTracker.getUpdatedStatus(shuffleId, fetchEpoch)
+    fetchEpoch = out._2
+    log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, new epoch: $fetchEpoch")
+    val statuses = out._1.synchronized {
+      Array[MapStatus]() ++ out._1
     }
+    var statusWithIndex = statuses.zipWithIndex
+
+    statusWithIndex = statuses.zipWithIndex
+    if (firstRead) {
+      firstRead = false
+      shuffleMetrics.incInitialReadTime(System.currentTimeMillis() - initTime)
+    } else {
+      // Calculate the time that we wait
+      val duration = System.currentTimeMillis() - startWaitTime
+      log.info("Waiting {} ms for new block to be available", duration)
+      shuffleMetrics.incWaitForPartialOutputTime(duration)
+      // Store the period that tasks wait for parent's output
+      shuffleMetrics.addWaitForParentPeriod((startWaitTime, duration))
+    }
+
+    statusWithIndex.foreach { case (status, mapId) =>
+      if (status != null && !readyBlocks.contains(mapId)) {
+        for (part <- startPartition until endPartition) {
+          splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
+            ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
+        }
+        readyBlocks += mapId
+      }
+    }
+    log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
+    log.info(s"Task ${context.taskAttemptId()}, Shuffle $shuffleId has ${readyBlocks.size} blocks ready")
+
+    if (readyBlocks.size == statuses.length) {
+      log.info(s"${readyBlocks.size} blocks ready for shuffle $shuffleId, finishing")
+      finished = true
+      waiter.arriveAndDeregister()
+    }
+
+    blockFetcherIter = new ShuffleBlockFetcherIterator(
+      context,
+      shuffleClient,
+      blockManager,
+      splitsByAddress.toSeq,
+      maxBytesInFlight)
   }
 }
