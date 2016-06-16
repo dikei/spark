@@ -71,7 +71,7 @@ class PartialShuffleBlockFetcherIterator(
       blockFetcherIter.hasNext
     } else {
       if (!blockFetcherIter.hasNext) {
-        if (!finished && !reOffered) {
+        if (!reOffered) {
           // If the map output is still incomplete & we haven't paused yet & we don't hold any lock on RDD
           // We want task that keep lock on RDD to run as fast as possible, so we never pause those
           reOffered = true
@@ -87,9 +87,10 @@ class PartialShuffleBlockFetcherIterator(
           }
         }
         refreshBlockFetcher()
+        
+        // Either the shuffle map stage is complete, or we still have data to process
+        assert(finished || blockFetcherIter.hasNext)
       }
-      // Block fetcher iterator should be refreshed here
-      assert(blockFetcherIter.hasNext)
 
       blockFetcherIter.hasNext
     }
@@ -103,9 +104,8 @@ class PartialShuffleBlockFetcherIterator(
     * Refresh the block fetcher. Block until we have new block or there is nothing to read
     */
   private def refreshBlockFetcher(): Unit = {
-    val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
-
-    while(!finished && splitsByAddress.isEmpty) {
+    while(!finished || !blockFetcherIter.hasNext) {
+      val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
       val startWaitTime = System.currentTimeMillis()
       // This will block until we have something new to return
       log.info(s"Task ${context.taskAttemptId()}, ShuffleId: $shuffleId, old epoch: $fetchEpoch")
@@ -147,13 +147,13 @@ class PartialShuffleBlockFetcherIterator(
         finished = true
         waiter.arriveAndDeregister()
       }
-    }
 
-    blockFetcherIter = new ShuffleBlockFetcherIterator(
-      context,
-      shuffleClient,
-      blockManager,
-      splitsByAddress.toSeq,
-      maxBytesInFlight)
+      blockFetcherIter = new ShuffleBlockFetcherIterator(
+        context,
+        shuffleClient,
+        blockManager,
+        splitsByAddress.toSeq,
+        maxBytesInFlight)
+    }
   }
 }
