@@ -88,6 +88,9 @@ class PartialShuffleBlockFetcherIterator(
         }
         refreshBlockFetcher()
       }
+      // Block fetcher iterator should be refreshed here
+      assert(blockFetcherIter.hasNext)
+
       blockFetcherIter.hasNext
     }
   }
