@@ -104,7 +104,7 @@ class PartialShuffleBlockFetcherIterator(
     * Refresh the block fetcher. Block until we have new block or there is nothing to read
     */
   private def refreshBlockFetcher(): Unit = {
-    while(!finished || !blockFetcherIter.hasNext) {
+    while(!finished && !blockFetcherIter.hasNext) {
       val splitsByAddress = new mutable.HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
       val startWaitTime = System.currentTimeMillis()
       // This will block until we have something new to return
