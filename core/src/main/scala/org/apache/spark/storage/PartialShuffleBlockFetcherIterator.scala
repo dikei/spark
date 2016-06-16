@@ -140,6 +140,7 @@ class PartialShuffleBlockFetcherIterator(
       log.info(s"Task ${context.taskAttemptId()}, Shuffle $shuffleId has ${readyBlocks.size} blocks ready")
 
       if (readyBlocks.size == statuses.length) {
+        log.info(s"${readyBlocks.size} blocks ready for shuffle $shuffleId, finishing")
         finished = true
         waiter.arriveAndDeregister()
       }
