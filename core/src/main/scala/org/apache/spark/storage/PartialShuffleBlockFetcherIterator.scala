@@ -71,12 +71,13 @@ class PartialShuffleBlockFetcherIterator(
       blockFetcherIter.hasNext
     } else {
       while(!finished && !blockFetcherIter.hasNext) {
-        if (!reOffered) {
+        refreshBlockFetcher()
+        if (!finished && !reOffered) {
           // If the map output is still incomplete & we haven't paused yet & we don't hold any lock on RDD
-          // We want task that keep lock on RDD to run as fast as possible, so we never pause those
           reOffered = true
           log.info("Task {} has incomplete map output. Try to run other tasks", context.taskAttemptId())
           if (cacheManager.hasLock(context.taskAttemptId())) {
+            // We want task that keep lock on RDD to run as fast as possible, so we never pause those
             log.info("Not pausing task {} because it's holding lock", context.taskAttemptId())
             context.executorBackend().reOffer(context.taskAttemptId(), shared = true)
           } else {
@@ -86,7 +87,6 @@ class PartialShuffleBlockFetcherIterator(
             log.info("Task {} resumed", context.taskAttemptId())
           }
         }
-        refreshBlockFetcher()
       }
       blockFetcherIter.hasNext
     }
