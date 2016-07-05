@@ -330,8 +330,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
     override def run(): Unit = {
       log.info("Map status updater for shuffle {} started", shuffleId)
-      val minInterval = 1000
-      val maxInterval = 1000
+      val minInterval = conf.getInt("spark.shuffle.minUpdateInterval", 1000)
+      val maxInterval = conf.getInt("spark.shuffle.maxUpdateInterval", 1000)
 
       updaterLock.put(shuffleId, new AnyRef)
       partialEpoch.synchronized {
