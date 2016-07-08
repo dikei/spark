@@ -447,7 +447,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     partialWaiters.synchronized {
       partialWaiters.foreach { case (context, statusCount) =>
         val hostPort = context.senderAddress.hostPort
-        log.info(s"Waiting to reply to $hostPort with: $currentStatuscount")
+        log.info(s"Replying to $hostPort with: $currentStatuscount")
         context.reply(currentStatuscount)
       }
       partialWaiters.clear()
