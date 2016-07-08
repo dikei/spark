@@ -37,7 +37,7 @@ private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
-private[spark] case class GetCompletedStatusCount(shuffleId: Int) extends MapOutputTrackerMessage
+private[spark] case class GetCompletedStatusCount(shuffleId: Int, completeness: Int) extends MapOutputTrackerMessage
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
@@ -63,11 +63,17 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       } else {
         context.reply(mapOutputStatuses)
       }
-    case GetCompletedStatusCount(shuffleId: Int) =>
+    case GetCompletedStatusCount(shuffleId: Int, completeness: Int) =>
       val statusCount = tracker.getCompletedStatusCount(shuffleId)
       val hostPort = context.senderAddress.hostPort
-      log.info(s"Asked to send shuffle $shuffleId completeness of to $hostPort: $statusCount")
-      context.reply(statusCount)
+      log.info(s"Asked to send shuffle $shuffleId completeness of to $hostPort")
+      if (completeness < statusCount) {
+        log.info(s"Replying to $hostPort now with: $statusCount")
+        context.reply(statusCount)
+      } else {
+        log.info(s"Waiting to reply to $hostPort")
+        tracker.registerWaiter(context, completeness)
+      }
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
       context.reply(true)
@@ -297,8 +303,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   def clearOutdatedMapStatus(shuffleId: Int): Boolean = {
     if (mapStatuses.contains(shuffleId)) {
-      val masterCompleteness = askTracker[Int](GetCompletedStatusCount(shuffleId))
-      val diff = masterCompleteness - getCompletedStatusCount(shuffleId)
+      val ourCompleteness = getCompletedStatusCount(shuffleId)
+      val masterCompleteness = askTracker[Int](GetCompletedStatusCount(shuffleId, ourCompleteness))
+      val diff = masterCompleteness - ourCompleteness
       if (diff > 0) {
         logInfo("Master is " + diff + " map statuses ahead of us for shuffle " +
           shuffleId + ". Clear local cache.")
@@ -342,13 +349,13 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
       var lastUpdate = System.currentTimeMillis
       while (partialShuffle.contains(shuffleId)) {
-        updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {
-          updaterLock(shuffleId).wait(maxInterval)
-        }
-        val interval = System.currentTimeMillis - lastUpdate
-        if (interval < minInterval) {
-          Thread.sleep(minInterval - interval)
-        }
+//        updaterLock.getOrElseUpdate(shuffleId, new AnyRef).synchronized {
+//          updaterLock(shuffleId).wait(maxInterval)
+//        }
+//        val interval = System.currentTimeMillis - lastUpdate
+//        if (interval < minInterval) {
+//          Thread.sleep(minInterval - interval)
+//        }
         lastUpdate = System.currentTimeMillis
 
         // clear & re-fetch the stored status
@@ -434,6 +441,16 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       // Invalidate the cached serialized map output
       epochLock.synchronized {
         cachedSerializedStatuses -= shuffleId
+      }
+    }
+    val currentStatuscount = getCompletedStatusCount(shuffleId)
+    partialWaiters.synchronized {
+      val needReply = partialWaiters.filter { case (_, statusCount) =>
+        statusCount < currentStatuscount
+      }
+      needReply.foreach { case (context, statusCount) =>
+        context.reply(currentStatuscount)
+        partialWaiters -= context
       }
     }
   }
@@ -606,6 +623,14 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private def cleanup(cleanupTime: Long) {
     mapStatuses.clearOldValues(cleanupTime)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
+  }
+
+  private val partialWaiters = new mutable.HashMap[RpcCallContext, Int]()
+
+  def registerWaiter(context: RpcCallContext, statusCount: Int): Unit = {
+    partialWaiters.synchronized {
+      partialWaiters += context -> statusCount
+    }
   }
 }
 
