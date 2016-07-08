@@ -445,13 +445,12 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
     val currentStatuscount = getCompletedStatusCount(shuffleId)
     partialWaiters.synchronized {
-      val needReply = partialWaiters.filter { case (_, statusCount) =>
-        statusCount < currentStatuscount
-      }
-      needReply.foreach { case (context, statusCount) =>
+      partialWaiters.foreach { case (context, statusCount) =>
+        val hostPort = context.senderAddress.hostPort
+        log.info(s"Waiting to reply to $hostPort with: $currentStatuscount")
         context.reply(currentStatuscount)
-        partialWaiters -= context
       }
+      partialWaiters.clear()
     }
   }
 
