@@ -64,16 +64,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
         context.reply(mapOutputStatuses)
       }
     case GetCompletedStatusCount(shuffleId: Int, completeness: Int) =>
-      val statusCount = tracker.getCompletedStatusCount(shuffleId)
-      val hostPort = context.senderAddress.hostPort
-      log.info(s"Asked to send shuffle $shuffleId completeness of to $hostPort")
-      if (completeness < statusCount) {
-        log.info(s"Replying to $hostPort now with: $statusCount")
-        context.reply(statusCount)
-      } else {
-        log.info(s"Waiting to reply to $hostPort")
-        tracker.registerWaiter(context)
-      }
+      tracker.tryRegisterWaiter(context, completeness, shuffleId)
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
       context.reply(true)
@@ -626,9 +617,18 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 
   private val partialWaiters = new mutable.Queue[RpcCallContext]()
 
-  def registerWaiter(context: RpcCallContext): Unit = {
+  def tryRegisterWaiter(context: RpcCallContext, completeness: Int, shuffleId: Int): Unit = {
     partialWaiters.synchronized {
-      partialWaiters += context
+      val statusCount = getCompletedStatusCount(shuffleId)
+      val hostPort = context.senderAddress.hostPort
+      log.info(s"Asked to send shuffle $shuffleId completeness of to $hostPort")
+      if (completeness < statusCount) {
+        log.info(s"Replying to $hostPort now with: $statusCount")
+        context.reply(statusCount)
+      } else {
+        log.info(s"Waiting to reply to $hostPort")
+        partialWaiters += context
+      }
     }
   }
 }
