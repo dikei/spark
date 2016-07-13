@@ -72,7 +72,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
         context.reply(statusCount)
       } else {
         log.info(s"Waiting to reply to $hostPort")
-        tracker.registerWaiter(context, completeness)
+        tracker.registerWaiter(context)
       }
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
@@ -445,7 +445,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
     val currentStatuscount = getCompletedStatusCount(shuffleId)
     partialWaiters.synchronized {
-      partialWaiters.foreach { case (context, statusCount) =>
+      partialWaiters.foreach { case context =>
         val hostPort = context.senderAddress.hostPort
         log.info(s"Replying to $hostPort with: $currentStatuscount")
         context.reply(currentStatuscount)
@@ -624,11 +624,11 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
   }
 
-  private val partialWaiters = new mutable.HashMap[RpcCallContext, Int]()
+  private val partialWaiters = new mutable.Queue[RpcCallContext]()
 
-  def registerWaiter(context: RpcCallContext, statusCount: Int): Unit = {
+  def registerWaiter(context: RpcCallContext): Unit = {
     partialWaiters.synchronized {
-      partialWaiters += context -> statusCount
+      partialWaiters += context
     }
   }
 }
