@@ -70,15 +70,19 @@ class PartialShuffleBlockFetcherIterator(
     if (finished) {
       blockFetcherIter.hasNext
     } else {
-      while(!finished && !blockFetcherIter.hasNext) {
+      while (!finished && !blockFetcherIter.hasNext) {
         refreshBlockFetcher()
         if (!finished && !reOffered) {
-          // If the map output is still incomplete & we haven't paused yet & we don't hold any lock on RDD
+          // If the map output is still incomplete & we haven't paused yet &
+          // we don't hold any lock on RDD
           reOffered = true
-          log.info("Task {} has incomplete map output. Try to run other tasks", context.taskAttemptId())
+          log.info("Task {} has incomplete map output. Try to run other tasks",
+            context.taskAttemptId())
           if (cacheManager.hasLock(context.taskAttemptId())) {
-            // We want task that keep lock on RDD to run as fast as possible, so we never pause those
-            log.info("Not pausing task {} because it's holding lock", context.taskAttemptId())
+            // We want task that keep lock on RDD to run as fast as possible,
+            // so we never pause those
+            log.info("Not pausing task {} because it's holding lock",
+              context.taskAttemptId())
             context.executorBackend().reOffer(context.taskAttemptId(), shared = true)
           } else {
             log.info("Pausing task {}", context.taskAttemptId())
@@ -134,8 +138,11 @@ class PartialShuffleBlockFetcherIterator(
         readyBlocks += mapId
       }
     }
-    log.info("Time waiting for partial output: {}", shuffleMetrics.waitForPartialOutputTime)
-    log.info(s"Task ${context.taskAttemptId()}, Shuffle $shuffleId has ${readyBlocks.size} blocks ready")
+    log.info("Time waiting for partial output: {}",
+      shuffleMetrics.waitForPartialOutputTime)
+    log.info(
+      s"Task ${context.taskAttemptId()}, " +
+        s"Shuffle $shuffleId has ${readyBlocks.size} blocks ready")
 
     if (readyBlocks.size == statuses.length) {
       log.info(s"${readyBlocks.size} blocks ready for shuffle $shuffleId, finishing")

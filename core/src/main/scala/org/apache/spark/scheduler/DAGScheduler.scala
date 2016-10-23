@@ -1029,25 +1029,8 @@ class DAGScheduler(
           partitionsToCompute.map { id =>
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
-//            if (removeStageBarrier) {
-//              var mapOutputAvail = 0L
-//              for (parentStage <- stage.parents) {
-//                parentStage match {
-//                  case shuffleStage: ShuffleMapStage =>
-//                    mapOutputAvail += mapOutputTracker.getMapOutputSizeForShuffle(
-//                      shuffleStage.shuffleDep.shuffleId,
-//                      part.index
-//                    )
-//                  case _ =>
-//                }
-//              }
-//              log.info(s"Map output available for task ${stage.id}.${part.index} is $mapOutputAvail")
-//              new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
-//                taskBinary, part, locs, stage.internalAccumulators, mapOutputAvail)
-//            } else {
               new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
                 taskBinary, part, locs, stage.internalAccumulators)
-//            }
           }
 
         case stage: ResultStage =>
@@ -1056,25 +1039,8 @@ class DAGScheduler(
             val p: Int = stage.partitions(id)
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
-//            if (removeStageBarrier) {
-//              var mapOutputAvail = 0L
-//              for (parentStage <- stage.parents) {
-//                parentStage match {
-//                  case shuffleStage: ShuffleMapStage =>
-//                    mapOutputAvail += mapOutputTracker.getMapOutputSizeForShuffle(
-//                      shuffleStage.shuffleDep.shuffleId,
-//                      part.index
-//                    )
-//                  case _ =>
-//                }
-//              }
-//              log.info(s"Map output available for task ${stage.id}.${part.index} is $mapOutputAvail")
-//              new ResultTask(stage.id, stage.latestInfo.attemptId,
-//                taskBinary, part, locs, id, stage.internalAccumulators, mapOutputAvail)
-//            } else {
               new ResultTask(stage.id, stage.latestInfo.attemptId,
                 taskBinary, part, locs, id, stage.internalAccumulators)
-//            }
           }
       }
     } catch {
@@ -1413,7 +1379,8 @@ class DAGScheduler(
       val candidates = waitingStagesCopy.filter { stage =>
         log.info("Checking stage {}, first job id: {} ", stage.id, stage.firstJobId)
         val parents = getMissingParentStages(stage)
-        parents.forall(p => !waitingStages.contains(p) && !failedStages.contains(p) && !prestartedStages.contains(p))
+        parents.forall(p => !waitingStages.contains(p) &&
+          !failedStages.contains(p) && !prestartedStages.contains(p))
       }.sortBy(_.id)
 
       if (candidates.nonEmpty) {
@@ -1436,7 +1403,8 @@ class DAGScheduler(
           case (s: ShuffleMapStage) =>
             if (runningStages.contains(s)) {
               // Register the map output immediately so we have something to read from
-              hasPrestartDependantStages.getOrElseUpdate(s, new mutable.ArrayBuffer[Stage]()) += stage
+              hasPrestartDependantStages.getOrElseUpdate(s,
+                new mutable.ArrayBuffer[Stage]()) += stage
             }
           case other =>
             log.info("Parent {} of stage {} is not a shuffle map stage", other.id, stage.id)

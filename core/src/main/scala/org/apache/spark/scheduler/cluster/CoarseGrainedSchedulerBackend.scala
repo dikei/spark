@@ -152,13 +152,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             logInfo(s"Task $taskId re-offer resources on $executorId")
-            val reOfferedForExecutor = reOffered.getOrElseUpdate(executorId, new HashMap[Long, Boolean])
-            if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK < reOfferRatio * executorInfo.totalCores) {
+            val reOfferedForExecutor =
+              reOffered.getOrElseUpdate(executorId, new HashMap[Long, Boolean])
+            if (reOfferedForExecutor.size * scheduler.CPUS_PER_TASK <
+              reOfferRatio * executorInfo.totalCores) {
               reOfferedForExecutor += taskId -> shared
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               if (!shared) {
                 scheduler.taskIdToTaskSetManager.get(taskId).foreach { tsm =>
-                  tsm.pausedTaskSet.getOrElseUpdate(executorId, new mutable.Queue[Long]()) += taskId
+                  tsm.pausedTaskSet.getOrElseUpdate(executorId,
+                    new mutable.Queue[Long]()) += taskId
                 }
               }
               makeOffers(executorId)
@@ -167,7 +170,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               if (!shared) {
                 executorInfo.executorEndpoint.send(ResumeTask(taskId))
               }
-              logInfo(s"Executor $executorId has already had ${reOfferedForExecutor.size} re-offered.")
+              logInfo(s"Executor $executorId has already " +
+                s"had ${reOfferedForExecutor.size} re-offered.")
             }
           case None =>
             // Ignoring the update since we don't know about the executor.

@@ -37,7 +37,8 @@ private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
-private[spark] case class GetCompletedStatusCount(shuffleId: Int, completeness: Int) extends MapOutputTrackerMessage
+private[spark] case class GetCompletedStatusCount(shuffleId: Int, completeness: Int)
+  extends MapOutputTrackerMessage
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
@@ -284,7 +285,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def stop() { }
 
   private val partialEpoch = new mutable.HashMap[Int, Int]()
-  private val partialShuffle = Collections.newSetFromMap[Int](new ConcurrentHashMap[Int, java.lang.Boolean]())
+  private val partialShuffle =
+    Collections.newSetFromMap[Int](new ConcurrentHashMap[Int, java.lang.Boolean]())
   private val updaterLock = new ConcurrentHashMap[Int, AnyRef]().asScala
 
   // Get the copmleted status count
@@ -556,8 +558,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       var mapIdx = 0
       while (mapIdx < statuses.length) {
         val status = statuses(mapIdx)
-        if (status != null)
+        if (status != null) {
           size += status.getSizeForBlock(reducerId)
+        }
         mapIdx += 1
       }
       size

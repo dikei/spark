@@ -150,10 +150,10 @@ private[spark] class TaskContextImpl(
   }
 
   private var _executorBackend: ExecutorBackend = _
-  def setExecutorBackend(backend: ExecutorBackend) = _executorBackend = backend
+  def setExecutorBackend(backend: ExecutorBackend): Unit = { _executorBackend = backend }
   override def executorBackend(): ExecutorBackend = _executorBackend
 
   private var _partialWaiter: Phaser = _
-  def setPartialWaiter(waiter: Phaser) = _partialWaiter = waiter
+  def setPartialWaiter(waiter: Phaser): Unit = { _partialWaiter = waiter }
   override def partialWaiter(): Phaser = _partialWaiter
 }

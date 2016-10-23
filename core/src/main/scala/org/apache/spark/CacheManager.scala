@@ -32,7 +32,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
   /** Keys of RDD partitions that are being computed/loaded. */
   private val loading = new mutable.HashSet[RDDBlockId]
 
-  /** Task which are holding block, we check this so that we don't pause these tasks **/
+  /** Task which are holding block, we check this so that we don't pause these tasks */
   private val lockHolders = new mutable.HashMap[Long, Int]
 
   /** Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached. */
@@ -108,13 +108,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
    * If the lock is free, just acquire it and return None. Otherwise, another thread is already
    * loading the partition, so we wait for it to finish and return the values loaded by the thread.
    */
-  private def acquireLockForPartition[T](id: RDDBlockId, context: TaskContext): Option[Iterator[T]] = {
+  private def acquireLockForPartition[T](id: RDDBlockId, context: TaskContext):
+    Option[Iterator[T]] = {
     loading.synchronized {
       if (!loading.contains(id)) {
         // If the partition is free, acquire its lock to compute its value
         logInfo(s"Task ${context.taskAttemptId()} lock block $id")
         loading.add(id)
-        lockHolders += context.taskAttemptId() -> (lockHolders.getOrElseUpdate(context.taskAttemptId(), 0) + 1)
+        lockHolders += context.taskAttemptId() ->
+          (lockHolders.getOrElseUpdate(context.taskAttemptId(), 0) + 1)
         None
       } else {
         logInfo(s"TaskId ${TaskContext.get().taskAttemptId()}")
@@ -135,7 +137,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
            * For instance, the block could be evicted after it was put, but before our get.
            * In this case, we still need to load the partition ourselves. */
           logInfo(s"Whoever was loading $id failed; we'll try it ourselves")
-          lockHolders += context.taskAttemptId() -> (lockHolders.getOrElseUpdate(context.taskAttemptId(), 0) + 1)
+          lockHolders += context.taskAttemptId() ->
+            (lockHolders.getOrElseUpdate(context.taskAttemptId(), 0) + 1)
           loading.add(id)
         }
         values.map(_.data.asInstanceOf[Iterator[T]])
